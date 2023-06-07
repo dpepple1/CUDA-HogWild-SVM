@@ -2,9 +2,8 @@
 #include <fstream>
 #include <string>
 
-#define FEATURES 10
-#define PATTERNS 10000
-
+#define FEATURES 2
+#define PATTERNS 1000
 
 int main(int argc, char *argv[])
 {  
@@ -48,7 +47,7 @@ int main(int argc, char *argv[])
     int labels[PATTERNS];
 
     // Bring in features from CSV file 
-    std::ifstream feat_csv("data/f10_std100/blobs.csv", std::ios_base::in);
+    std::ifstream feat_csv("data/lin_sep/blobs.csv", std::ios_base::in);
 
     int row;
     float x, y;
@@ -62,7 +61,7 @@ int main(int argc, char *argv[])
 
     // Bring in class labels from CSV file
 
-    std::ifstream label_csv("data/f10_std100/blobs_classes.csv");
+    std::ifstream label_csv("data/lin_sep/blobs_classes.csv");
     int label;
     while(label_csv >> row >> label)
     {
@@ -78,7 +77,7 @@ int main(int argc, char *argv[])
 
     // Test the model
     float accuracy = svc.test((float*)patterns, labels);
-    std::cout << "Accuracy: " << accuracy << std::endl;
+    std::cout << "Final Accuracy: " << accuracy * 100 << "%" << std::endl;
 
     //Print final weights
     float *weights = svc.getWeights();
@@ -89,5 +88,12 @@ int main(int argc, char *argv[])
     }
     std::cout << std::endl;
 
+    std::cout << "Bias: " << svc.getBias() << std::endl;
+
     return 0;
 }
+
+//TODO: Figure out why linearly seperable data is not converging
+// Possibilities:
+//      Need seperate bias term?
+//      C?

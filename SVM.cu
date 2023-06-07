@@ -65,8 +65,8 @@ __host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
     cudaFree(d_labels);
 }
 
-__host__ void HOGSVM::fit(float *patterns, uint features, int *labels, uint numPairs, int blocks, int threadsPerBlock)
-{
+__host__ void HOGSVM::fit(float *patterns, uint features, int *labels, 
+                            uint numPairs, int blocks, int threadsPerBlock) {
     this->features = features;
     this->numPairs = numPairs;
 
@@ -74,9 +74,15 @@ __host__ void HOGSVM::fit(float *patterns, uint features, int *labels, uint numP
     weights[features] = {};
     initWeights(features);
 
+    bias = 0;
+
     float *d_weights = 0;
     cudaMalloc(&d_weights, features * sizeof(float));
     cudaMemcpy(d_weights, weights, features * sizeof(float), cudaMemcpyHostToDevice);
+
+    float *d_bias = 0;
+    cudaMalloc(&d_bias, sizeof(float));
+    cudaMemcpy(d_bias, &bias, sizeof(float), cudaMemcpyHostToDevice);
 
     // Set up curand states
     curandState_t* states;
@@ -89,11 +95,12 @@ __host__ void HOGSVM::fit(float *patterns, uint features, int *labels, uint numP
     // Spawn threads to begin SGD Process
     SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, states,
                          d_patterns, d_labels, features, numPairs, iterationsPerCore, 
-                         d_weights, learningRate);
+                         d_weights, d_bias, learningRate);
 
     // Wait for threads to finish and collect weights
     cudaDeviceSynchronize();
     cudaMemcpy(weights, d_weights, features * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&bias, d_bias, sizeof(float), cudaMemcpyDeviceToHost);
     
     cudaFree(d_weights);
     cudaFree(states);
@@ -102,7 +109,7 @@ __host__ void HOGSVM::fit(float *patterns, uint features, int *labels, uint numP
 
 __host__ float HOGSVM::test(float *test_patterns, int *test_labels)
 {
-    float result = testAccuracy(test_patterns, test_labels, features, weights, numPairs);
+    float result = testAccuracy(test_patterns, test_labels, features, weights, bias, numPairs);
     return result;
 }
 
@@ -111,13 +118,17 @@ __host__ float* HOGSVM::getWeights()
     return weights;
 }
 
+__host__ float HOGSVM::getBias()
+{
+    return bias;
+}
 
 // ========================
 //      CUDA FUNCTIONS
 // ========================
 
 // __device__ prediction that can be used by the kernel when training
-__host__ __device__ int predict(float *weights, float *pattern, uint features)
+__host__ __device__ int predict(float *weights, float bias, float *pattern, uint features)
 {
     // To make prediction we need to calculate dot product
     float dotProd = 0;
@@ -126,39 +137,46 @@ __host__ __device__ int predict(float *weights, float *pattern, uint features)
         dotProd += (weights[dim] * pattern[dim]);
     }
 
+    dotProd += bias;
+
     return dotProd > 0 ? 1 : -1; // Must be either 1 or -1
 }
 
-// Sets the grad array to the gradient of the hinge loss 
-__device__ void setGradient(float *grad, int trueLabel, int decision, float *row, uint features)
+// Sets the wGrad array to the gradient of the hinge loss and returns the bGrad
+__device__ float setGradient(float *wGrad, int trueLabel, int decision, float *row, uint features)
 {
     if (1 - trueLabel * decision <= 0)
     {
-        memset(grad, 0, features * sizeof(float));
+        memset(wGrad, 0, features * sizeof(float));
+        return 0;
     }
     else
     {
         for(int comp = 0; comp < features; comp++)
         {
-            grad[comp] = -trueLabel * row[comp];
+            wGrad[comp] = -trueLabel * row[comp];
         }
+        return (float) -trueLabel;
     }
 }
 
-// Use the gradient to update the model vector
-__device__ void updateModel(float *d_weights, float *grad, uint features, float learningRate)
+// Use the gradient to update the model vector and bias
+__device__ void updateModel(float *d_weights, float *bias, float *wGrad, float bGrad, uint features, float learningRate)
 {
     for(int dim = 0; dim < features; dim++)
     {
         // multiply by learning rate
-        d_weights[dim] -= learningRate * grad[dim]; // Would it be += or -= here?
+        d_weights[dim] -= learningRate * wGrad[dim]; // Would it be += or -= here?
     }   
+
+    *bias -= learningRate * bGrad;
 }
 
 // CUDA Kernel that performs HOGWILD! SGD
 __global__ void SGDKernel(uint threadCount, curandState_t *states, float *d_patterns, 
                             int *d_labels, uint features, uint numPairs, 
-                            uint iterations, float *d_weights, float learningRate) {   
+                            uint iterations, float *d_weights, float *d_bias,
+                            float learningRate) {   
     // Compute Thread Index
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -169,7 +187,7 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, float *d_patt
 
     // Declaring here to avoid re-allocing
     float *copyWeights = new float[features];
-    float *grad = new float[features];
+    float *wGrad = new float[features];
     curand_init(123, i, 0, &states[i]);
 
     // Start the training process
@@ -183,31 +201,30 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, float *d_patt
         float *row = patternStart + (features * randIdx);
         int *trueLabel = labelStart + randIdx;
 
-        // Make a copy of the current weights for this thread
+        // Make a copy of the current weights and bias for this thread
         memcpy(copyWeights, d_weights, features * sizeof(float));
 
         // Make prediction and set gradient
-        int decision = predict(copyWeights, row, features);
-        setGradient(grad, *trueLabel, decision, row, features);
+        int decision = predict(copyWeights, *d_bias, row, features);
+        float bGrad = setGradient(wGrad, *trueLabel, decision, row, features);
         
         // Update model vector
-        updateModel(d_weights, grad, features, learningRate);
+        updateModel(d_weights, d_bias, wGrad, bGrad, features, learningRate);
 
         // Test epochs
         if(i == 0 && iter % (iterations / 10) == 0)
         {
-            float sample = testAccuracy(d_patterns, d_labels, features, copyWeights, numPairs);
-            printf("Iteration %d : Accuracy %f%\n", iter, sample);
+            float sample = testAccuracy(d_patterns, d_labels, features, copyWeights, *d_bias, numPairs);
+            printf("Iteration %d : Accuracy %f%\n", iter, sample * 100);
         }
-
-    }  
+    }
 
     delete[] copyWeights;
-    delete[] grad;
+    delete[] wGrad;
 }
 
 __host__ __device__ float testAccuracy(float *patterns, int *labels, uint features,
-                                        float *weights, uint numPairs) {
+                                        float *weights, float bias, uint numPairs) {
     int correct = 0;
     int total = 0;
 
@@ -216,7 +233,7 @@ __host__ __device__ float testAccuracy(float *patterns, int *labels, uint featur
         float *pattern = patterns + (pair * features);
         int label = labels[pair];
 
-        int prediction = predict(weights, pattern, features);
+        int prediction = predict(weights, bias, pattern, features);
 
         if(prediction == label)
             correct++;
@@ -226,3 +243,8 @@ __host__ __device__ float testAccuracy(float *patterns, int *labels, uint featur
 
     return (float)correct / (float)total;
 }
+
+
+// TODO:
+// Figure out how the bias gradient needs to be applied
+// Figure out how the multithreading interacts with the bias update. 
