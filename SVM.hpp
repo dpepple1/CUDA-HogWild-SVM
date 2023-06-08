@@ -19,16 +19,18 @@ by Derek Pepple
 
 #include <iostream>
 #include <curand_kernel.h>
+#include <chrono>
+
 
 class HOGSVM
 {
     public:
         // Constructor/Destructor pair
-        HOGSVM(float lambda, float learningRate, uint iterationsPerCore);
+        HOGSVM(float lambda, float learningRate, uint epochsPerCore);
         ~HOGSVM();
 
         // Public methods
-        CUDA_HOS void fit(float *patterns, uint features, int *labels, uint numPairs,
+        CUDA_HOS int fit(float *patterns, uint features, int *labels, uint numPairs,
                             int blocks, int threadsPerBlock);
         CUDA_HOS float test(float *test_patterns, int *test_labels);
         CUDA_HOS float* getWeights();
@@ -37,7 +39,7 @@ class HOGSVM
     private:
         float lambda;
         float learningRate;
-        uint iterationsPerCore;
+        uint epochsPerCore;
 
         uint features;
         uint numPairs;
@@ -53,7 +55,7 @@ class HOGSVM
 
 CUDA_GLO void SGDKernel(uint threadCount, curandState_t *states, float *d_patterns, 
                             int *d_labels, uint features, uint numPairs, 
-                            uint iterations, float *d_weights, float *bias,
+                            uint epochs, float *d_weights, float *bias,
                             float learningRate);
 CUDA_HOS CUDA_DEV int predict(float *d_weights, float bias, float *d_pattern, uint features );       
 CUDA_DEV float setGradient(float *wGrad, int trueLabel, int decision, float *row, uint features);

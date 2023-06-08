@@ -1,5 +1,5 @@
 NVCC = nvcc
-NVCC_FLAGS = -g -G -Xcompiler -Wall -arch sm_75
+NVCC_FLAGS = -g -G -Xcompiler -Wall -gencode arch=compute_75,code=sm_75
 
 all: main
 

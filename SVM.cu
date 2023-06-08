@@ -10,11 +10,11 @@ by Derek Pepple
 #include <unistd.h>
 
 
-__host__ HOGSVM::HOGSVM(float lambda, float learningRate, uint iterationsPerCore)
+__host__ HOGSVM::HOGSVM(float lambda, float learningRate, uint epochsPerCore)
 {
     this->lambda = lambda; // Still am not using anywhere
     this->learningRate = learningRate;
-    this->iterationsPerCore = iterationsPerCore;
+    this->epochsPerCore = epochsPerCore;
 }
 
 __host__ HOGSVM::~HOGSVM()
@@ -65,7 +65,7 @@ __host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
     cudaFree(d_labels);
 }
 
-__host__ void HOGSVM::fit(float *patterns, uint features, int *labels, 
+__host__ int HOGSVM::fit(float *patterns, uint features, int *labels, 
                             uint numPairs, int blocks, int threadsPerBlock) {
     this->features = features;
     this->numPairs = numPairs;
@@ -92,19 +92,25 @@ __host__ void HOGSVM::fit(float *patterns, uint features, int *labels,
     int *d_labels = setupGPULabels(labels, numPairs);
     float *d_patterns = setupGPUPatterns(patterns, features, numPairs);
 
+    auto begin = std::chrono::steady_clock::now();
+
     // Spawn threads to begin SGD Process
     SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, states,
-                         d_patterns, d_labels, features, numPairs, iterationsPerCore, 
+                         d_patterns, d_labels, features, numPairs, epochsPerCore, 
                          d_weights, d_bias, learningRate);
 
     // Wait for threads to finish and collect weights
     cudaDeviceSynchronize();
+    auto end = std::chrono::steady_clock::now();
+
     cudaMemcpy(weights, d_weights, features * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(&bias, d_bias, sizeof(float), cudaMemcpyDeviceToHost);
     
     cudaFree(d_weights);
     cudaFree(states);
     freeTrainingData(d_patterns, d_labels);
+
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 }
 
 __host__ float HOGSVM::test(float *test_patterns, int *test_labels)
@@ -170,12 +176,14 @@ __device__ void updateModel(float *d_weights, float *bias, float *wGrad, float b
     }   
 
     *bias -= learningRate * bGrad;
+    //*bias -=  0.5 * bGrad;
+
 }
 
 // CUDA Kernel that performs HOGWILD! SGD
 __global__ void SGDKernel(uint threadCount, curandState_t *states, float *d_patterns, 
                             int *d_labels, uint features, uint numPairs, 
-                            uint iterations, float *d_weights, float *d_bias,
+                            uint epochs, float *d_weights, float *d_bias,
                             float learningRate) {   
     // Compute Thread Index
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -191,32 +199,42 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, float *d_patt
     curand_init(123, i, 0, &states[i]);
 
     // Start the training process
-    for(uint iter = 0; iter < iterations; iter++)
+    for(uint epoch = 0; epoch < epochs; epoch++)
     {
-        // Get random number in range of number of patterns in the chunk
-        float randNum = curand_uniform(&states[i]);
-        uint randIdx = (uint) (randNum * pairsPerThread);
+        // bool terminalEpoch = true;
 
-        // Set a pointer to the start of a random row within the chunk
-        float *row = patternStart + (features * randIdx);
-        int *trueLabel = labelStart + randIdx;
-
-        // Make a copy of the current weights and bias for this thread
-        memcpy(copyWeights, d_weights, features * sizeof(float));
-
-        // Make prediction and set gradient
-        int decision = predict(copyWeights, *d_bias, row, features);
-        float bGrad = setGradient(wGrad, *trueLabel, decision, row, features);
-        
-        // Update model vector
-        updateModel(d_weights, d_bias, wGrad, bGrad, features, learningRate);
-
-        // Test epochs
-        if(i == 0 && iter % (iterations / 10) == 0)
+        //Each epoch theoretically goes over the whole dataset
+        for(uint iter = 0; iter < pairsPerThread; iter++)
         {
-            float sample = testAccuracy(d_patterns, d_labels, features, copyWeights, *d_bias, numPairs);
-            printf("Iteration %d : Accuracy %f%\n", iter, sample * 100);
+             // Get random number in range of number of patterns in the chunk
+            float randNum = curand_uniform(&states[i]);
+            uint randIdx = (uint) (randNum * pairsPerThread);
+
+            // Set a pointer to the start of a random row within the chunk
+            float *row = patternStart + (features * randIdx);
+            int *trueLabel = labelStart + randIdx;
+
+            // Make a copy of the current weights and bias for this thread
+            memcpy(copyWeights, d_weights, features * sizeof(float));
+
+            // Make prediction and set gradient
+            int decision = predict(copyWeights, *d_bias, row, features);
+            float bGrad = setGradient(wGrad, *trueLabel, decision, row, features);
+            
+            // if(terminalEpoch && bGrad != 0)
+            //     terminalEpoch = false;
+            
+            // Update model vector
+            updateModel(d_weights, d_bias, wGrad, bGrad, features, learningRate);
         }
+
+        // If this thread has done nothing for the last epoch, stop
+        // if(terminalEpoch)
+        // {
+        //     float sample = testAccuracy(d_patterns, d_labels, features, copyWeights, *d_bias, numPairs);
+        //     printf("Thread %d finished after epoch %d with accuracy: %2.3f\n", i, epoch, sample * 100);
+        //     return;
+        // }
     }
 
     delete[] copyWeights;
@@ -248,3 +266,5 @@ __host__ __device__ float testAccuracy(float *patterns, int *labels, uint featur
 // TODO:
 // Figure out how the bias gradient needs to be applied
 // Figure out how the multithreading interacts with the bias update. 
+
+// Before testing speedup, do something about the print statements in thread 1
