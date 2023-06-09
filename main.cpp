@@ -1,6 +1,8 @@
 #include "SVM.hpp"
 #include <fstream>
 #include <string>
+#include <vector>
+#include <sstream>
 
 #define FEATURES 10
 #define PATTERNS 10000
@@ -37,7 +39,7 @@ int main(int argc, char *argv[])
             arg++;
             epochs = std::stoi(argv[arg]);
         }
-        else if(not strcmp(argv[arg], "-m")) // Run in  mode
+        else if (not strcmp(argv[arg], "-m")) // Run in  mode
         {
             batchMode = true;
         }
@@ -53,13 +55,25 @@ int main(int argc, char *argv[])
 
     // Bring in features from CSV file 
     std::ifstream feat_csv("data/f10_std100/blobs.csv", std::ios_base::in);
+    std::string line;
+    int row = 0;
+    int col = -1;
+    float val;
 
-    int row;
-    float x, y;
-    while(feat_csv >> row >> x >> y)
+    if(feat_csv.good())
     {
-        patterns[row][0] = x;
-        patterns[row][1] = y;
+        while(std::getline(feat_csv, line))
+        {
+            std::stringstream ss(line);
+            col = -1;
+            while(ss >> val)
+            {
+                if(col != -1)
+                    patterns[row][col] = val;
+                col++;
+            }
+            row ++;
+        }
     }
 
     feat_csv.close();
@@ -70,7 +84,6 @@ int main(int argc, char *argv[])
     int label;
     while(label_csv >> row >> label)
     {
-        
         // Labels must be 1 or -1;
         labels[row] = (label == 1) ? 1 : -1; 
     }
@@ -103,8 +116,7 @@ int main(int argc, char *argv[])
 
     size_t data = 47236 * sizeof(float) * 677399 ;
     std::cout << "Bytes of data: " << data << std::endl;
-
-
+    
     return 0;
 }
 
@@ -112,3 +124,5 @@ int main(int argc, char *argv[])
 // Possibilities:
 //      Need seperate bias term?
 //      C?
+
+// Somehow getting a segfault with new changes
