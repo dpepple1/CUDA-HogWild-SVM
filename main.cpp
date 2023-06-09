@@ -2,8 +2,8 @@
 #include <fstream>
 #include <string>
 
-#define FEATURES 2
-#define PATTERNS 1000
+#define FEATURES 10
+#define PATTERNS 10000
 
 int main(int argc, char *argv[])
 {  
@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
             arg++;
             epochs = std::stoi(argv[arg]);
         }
-        else if(not strcmp(argv[arg], "-b")) // Run in batch mode
+        else if(not strcmp(argv[arg], "-m")) // Run in  mode
         {
             batchMode = true;
         }
@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
     int labels[PATTERNS];
 
     // Bring in features from CSV file 
-    std::ifstream feat_csv("data/lin_sep/blobs.csv", std::ios_base::in);
+    std::ifstream feat_csv("data/f10_std100/blobs.csv", std::ios_base::in);
 
     int row;
     float x, y;
@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
 
     // Bring in class labels from CSV file
 
-    std::ifstream label_csv("data/lin_sep/blobs_classes.csv");
+    std::ifstream label_csv("data/f10_std100/blobs_classes.csv");
     int label;
     while(label_csv >> row >> label)
     {
@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
     HOGSVM svc(0.000001, learningRate, epochs);
 
     // Train the model and measure time
-    int elapsedTime = svc.fit((float*)patterns, FEATURES, labels, PATTERNS, blocks, threadsPerBlock);
+    long elapsedTime = svc.fit((float*)patterns, FEATURES, labels, PATTERNS, blocks, threadsPerBlock);
 
     // Test the model
     float accuracy = svc.test((float*)patterns, labels);
@@ -98,7 +98,12 @@ int main(int argc, char *argv[])
     std::cout << "Time to train: " << elapsedTime << " ns" << std::endl;
 
     if (batchMode)
-        std::cerr << " " << elapsedTime << std::endl;
+        std::cerr << accuracy << "," <<  elapsedTime << std::endl;
+
+
+    size_t data = 47236 * sizeof(float) * 677399 ;
+    std::cout << "Bytes of data: " << data << std::endl;
+
 
     return 0;
 }

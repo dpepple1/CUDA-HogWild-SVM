@@ -30,7 +30,7 @@ class HOGSVM
         ~HOGSVM();
 
         // Public methods
-        CUDA_HOS int fit(float *patterns, uint features, int *labels, uint numPairs,
+        CUDA_HOS long fit(float *patterns, uint features, int *labels, uint numPairs,
                             int blocks, int threadsPerBlock);
         CUDA_HOS float test(float *test_patterns, int *test_labels);
         CUDA_HOS float* getWeights();
