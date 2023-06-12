@@ -13,14 +13,23 @@
 
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
+#include <string>
+#include <fstream>
+#include <sstream>
+#include <cstring>
 
-
-struct SparseData
+struct SparseEntry
 {
     int index;
     float value;
 };
 
-CUDA_HOS thrust::device_vector<SparseData> buildSparesData();
+struct SparseDataset
+{
+    thrust::host_vector<SparseEntry>* patterns;
+    int *labels;
+};
+
+CUDA_HOS SparseDataset buildSparseData(std::string path, uint num_patterns, uint num_features);
 
 #endif

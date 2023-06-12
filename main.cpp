@@ -1,4 +1,5 @@
 #include "SVM.hpp"
+#include "sparse_data.hpp"
 #include <fstream>
 #include <string>
 #include <vector>
@@ -12,7 +13,6 @@
 
 int main(int argc, char *argv[])
 {  
-    
     int blocks = 1;
     int threadsPerBlock = 32;
     float learningRate = 0.1;
@@ -118,7 +118,6 @@ int main(int argc, char *argv[])
 
     if (batchMode)
         std::cerr << accuracy << "," <<  elapsedTime << std::endl;
-    
     
     return 0;
 }
