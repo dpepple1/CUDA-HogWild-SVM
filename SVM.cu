@@ -15,11 +15,14 @@ __host__ HOGSVM::HOGSVM(float lambda, float learningRate, uint epochsPerCore)
     this->lambda = lambda; // Still am not using anywhere
     this->learningRate = learningRate;
     this->epochsPerCore = epochsPerCore;
+    weights = NULL;
 }
 
 __host__ HOGSVM::~HOGSVM()
 {
-    //Free any variables 
+    //Free weights array
+    if(weights != NULL)
+        delete[] weights;
 }
 
 __host__ void HOGSVM::initWeights(uint features)
@@ -69,23 +72,25 @@ __host__ long HOGSVM::fit(float *patterns, uint features, int *labels,
                             uint numPairs, int blocks, int threadsPerBlock) {
 
     auto begin = std::chrono::steady_clock::now();
+    
     this->features = features;
     this->numPairs = numPairs;
 
     // Create SVM weights and copy to GPU Memory
-    weights[features] = {};
+    weights = new float[features]();
+    //weights[features] = {};
     initWeights(features);
-
+    
     bias = 0;
-
+    
     float *d_weights = 0;
     cudaMalloc(&d_weights, features * sizeof(float));
     cudaMemcpy(d_weights, weights, features * sizeof(float), cudaMemcpyHostToDevice);
-
+    
     float *d_bias = 0;
     cudaMalloc(&d_bias, sizeof(float));
     cudaMemcpy(d_bias, &bias, sizeof(float), cudaMemcpyHostToDevice);
-
+    
     // Set up curand states
     curandState_t* states;
     cudaMalloc((void**)&states, blocks * threadsPerBlock * sizeof(curandState_t));
@@ -93,7 +98,7 @@ __host__ long HOGSVM::fit(float *patterns, uint features, int *labels,
     //Allocate GPU training data
     int *d_labels = setupGPULabels(labels, numPairs);
     float *d_patterns = setupGPUPatterns(patterns, features, numPairs);
-
+    
     // Spawn threads to begin SGD Process
     SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, states,
                          d_patterns, d_labels, features, numPairs, epochsPerCore, 
