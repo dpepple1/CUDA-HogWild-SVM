@@ -7,9 +7,12 @@
 #define FEATURES 10
 #define PATTERNS 10000
 
+#define DATA_PATH "f10_std100"
+//#define DATA_PATH "lin_sep"
+
 int main(int argc, char *argv[])
 {  
-
+    
     int blocks = 1;
     int threadsPerBlock = 32;
     float learningRate = 0.1;
@@ -49,12 +52,14 @@ int main(int argc, char *argv[])
         }
     }
 
+    
     // Data
     float patterns[PATTERNS][FEATURES];
     int labels[PATTERNS];
 
     // Bring in features from CSV file 
-    std::ifstream feat_csv("data/f10_std100/blobs.csv", std::ios_base::in);
+    std::string blob_url = "data/";
+    std::ifstream feat_csv(blob_url + DATA_PATH + "/blobs.csv", std::ios_base::in);
     std::string line;
     int row = 0;
     int col = -1;
@@ -80,23 +85,24 @@ int main(int argc, char *argv[])
 
     // Bring in class labels from CSV file
 
-    std::ifstream label_csv("data/f10_std100/blobs_classes.csv");
+    std::ifstream label_csv(blob_url + DATA_PATH + "/blobs_classes.csv");
     int label;
+    row = 0;
     while(label_csv >> row >> label)
     {
         // Labels must be 1 or -1;
         labels[row] = (label == 1) ? 1 : -1; 
     }
-
+    
     HOGSVM svc(0.000001, learningRate, epochs);
-
+    
     // Train the model and measure time
     long elapsedTime = svc.fit((float*)patterns, FEATURES, labels, PATTERNS, blocks, threadsPerBlock);
-
+    
     // Test the model
     float accuracy = svc.test((float*)patterns, labels);
     std::cout << "Final Accuracy: " << accuracy * 100 << "%" << std::endl;
-
+    
     // Print final weights
     float *weights = svc.getWeights();
     std::cout << "Weights: ";
@@ -112,10 +118,7 @@ int main(int argc, char *argv[])
 
     if (batchMode)
         std::cerr << accuracy << "," <<  elapsedTime << std::endl;
-
-
-    size_t data = 47236 * sizeof(float) * 677399 ;
-    std::cout << "Bytes of data: " << data << std::endl;
+    
     
     return 0;
 }
@@ -124,5 +127,3 @@ int main(int argc, char *argv[])
 // Possibilities:
 //      Need seperate bias term?
 //      C?
-
-// Somehow getting a segfault with new changes

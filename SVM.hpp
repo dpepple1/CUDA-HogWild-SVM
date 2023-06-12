@@ -45,7 +45,7 @@ class HOGSVM
         uint numPairs;
 
         float bias;
-        float weights[];
+        float *weights;
 
         CUDA_HOS void initWeights(uint features);
         CUDA_HOS int *setupGPULabels(int *labels, uint numPairs);
