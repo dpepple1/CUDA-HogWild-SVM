@@ -1,11 +1,10 @@
-#include "sparse_data.hpp"
+#include "sparse_data.cuh"
 
 
 // Returns a host vector so that it can be converted to a device_vector
 // when it is convienent to do so.
 __host__ SparseDataset buildSparseData(std::string path, uint num_patterns, uint num_features)
 {
-
     // Create list of host_vectors to append to
     std::cout << num_patterns << std::endl;
     thrust::host_vector<SparseEntry> *patterns = new thrust::host_vector<SparseEntry>[num_patterns]();
@@ -47,7 +46,9 @@ __host__ SparseDataset buildSparseData(std::string path, uint num_patterns, uint
             row++;
         }
     }   
-    
+
+    csv.close();
+
     SparseDataset dataset = {patterns, labels};
     return dataset;
 

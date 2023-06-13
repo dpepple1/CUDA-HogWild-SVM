@@ -1,11 +1,14 @@
 /*
+
+SPARSE SVM: Designed to take sparse formatted data
+
 A C++ support vector machine that uses stochastic gradient descent optimization
 implemented using the HOGWILD! algorithm for parrallization on GPUs.
 
 by Derek Pepple
 */
 
-#include "SVM.hpp"
+#include "SVM_sparse.cuh"
 #include <stdio.h>
 #include <unistd.h>
 
@@ -47,27 +50,73 @@ __host__ int *HOGSVM::setupGPULabels(int *labels, uint numPairs)
 }
 
 // Copies patterns of training data to GPU memory
-__host__ float *HOGSVM::setupGPUPatterns(float *patterns, uint features, uint numPairs)
-{
-    /*
-        Note: patterns will be stored as a flattened array instead of
-        the 2D array that they are initially entered as.
-    */
-    
-    float *d_patterns;
-    cudaMalloc(&d_patterns, features * numPairs * sizeof(float));
-    cudaMemcpy(d_patterns, patterns, features * numPairs * sizeof(float), cudaMemcpyHostToDevice);
-    
+__host__ thrust::device_vector<SparseEntry> *HOGSVM::setupGPUPatterns(
+                        thrust::host_vector<SparseEntry> *patterns, uint numPairs) {
+    thrust::device_vector<SparseEntry> *d_patterns = new thrust::device_vector<SparseEntry>[numPairs]();
+    for(uint i = 0; i < numPairs; i++)
+    {
+        d_patterns[i] = patterns[i];
+    }
     return d_patterns;
 }
 
 // Free Training CUDA Memory
-__host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
+__host__ void HOGSVM::freeTrainingData(thrust::device_vector<SparseEntry> *d_patterns, int *d_labels)
 {
-    cudaFree(d_patterns);
+    delete[] d_patterns;
     cudaFree(d_labels);
 }
 
+
+// Sparse Fit Function
+__host__ long HOGSVM::fit(SparseDataset data, uint features, uint numPairs,
+                            int blocks, int threadsPerBlock) {
+
+    auto begin = std::chrono::steady_clock::now();
+
+    this->features = features;
+    this->numPairs = numPairs;
+
+    // Create SVM weights and copy to GPU Memory
+    weights = new float[features]();
+    initWeights(features);
+    
+    bias = 0;
+    
+    float *d_weights = 0;
+    cudaMalloc(&d_weights, features * sizeof(float));
+    cudaMemcpy(d_weights, weights, features * sizeof(float), cudaMemcpyHostToDevice);
+    
+    float *d_bias = 0;
+    cudaMalloc(&d_bias, sizeof(float));
+    cudaMemcpy(d_bias, &bias, sizeof(float), cudaMemcpyHostToDevice);
+    
+    // Set up curand states
+    curandState_t* states;
+    cudaMalloc((void**)&states, blocks * threadsPerBlock * sizeof(curandState_t));
+
+    // Convert Dataset to GPU memory
+    int *d_labels = setupGPULabels(data.labels, numPairs);
+    thrust::device_vector<SparseEntry>* d_patterns = setupGPUPatterns(data.patterns, numPairs);
+    
+    // LAUNCH KERNEL
+    // LAUNCHING FAKE KERNEL TO TEST FIRST
+    testKernel<<<1,1>>>(d_patterns, d_labels);
+
+    cudaMemcpy(weights, d_weights, features * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&bias, d_bias, sizeof(float), cudaMemcpyDeviceToHost);
+    auto end = std::chrono::steady_clock::now();
+    cudaFree(d_weights);
+    cudaFree(states);
+    freeTrainingData(d_patterns, d_labels);
+
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
+
+}
+
+/*
+
+// Original Fit Function
 __host__ long HOGSVM::fit(float *patterns, uint features, int *labels, 
                             uint numPairs, int blocks, int threadsPerBlock) {
 
@@ -78,7 +127,6 @@ __host__ long HOGSVM::fit(float *patterns, uint features, int *labels,
 
     // Create SVM weights and copy to GPU Memory
     weights = new float[features]();
-    //weights[features] = {};
     initWeights(features);
     
     bias = 0;
@@ -117,6 +165,8 @@ __host__ long HOGSVM::fit(float *patterns, uint features, int *labels,
 
     return std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 }
+
+*/
 
 __host__ float HOGSVM::test(float *test_patterns, int *test_labels)
 {
@@ -268,8 +318,12 @@ __host__ __device__ float testAccuracy(float *patterns, int *labels, uint featur
 }
 
 
-// TODO:
-// Figure out how the bias gradient needs to be applied
-// Figure out how the multithreading interacts with the bias update. 
 
-// Before testing speedup, do something about the print statements in thread 1
+
+__global__ void testKernel(thrust::device_vector<SparseEntry> *patterns, int *labels)
+{
+    for(int i = 0; i < patterns[0].size(); i++)
+    {
+        printf("%d:%f\n", patterns[0][i].index, patterns[0][i].value);
+    }
+}
