@@ -3,18 +3,21 @@
 
 // Returns a host vector so that it can be converted to a device_vector
 // when it is convienent to do so.
-__host__ SparseDataset buildSparseData(std::string path, uint num_patterns, uint num_features)
+__host__ CSR_Data buildSparseData(std::string path, uint num_patterns, uint num_features)
 {
-    // Create list of host_vectors to append to
-    std::cout << num_patterns << std::endl;
-    thrust::host_vector<SparseEntry> *patterns = new thrust::host_vector<SparseEntry>[num_patterns]();
-    int labels[num_patterns];
+    // Indeterminate number of values so these are vectors
+    std::vector<int> v_colIdx;
+    std::vector<float> v_values;
+
+    // Determinate number of rows and labels so these are arrays
+    int *rowIdx = new int[num_patterns];
+    int *labels = new int[num_patterns];
 
     // Declare variables for file reading
     std::ifstream csv(path, std::ios_base::in);
     std::string line;
     int row = 0;
-    int col = -1;
+    int col = 0;
     std::string pair;
 
     if(csv.good())
@@ -23,23 +26,36 @@ __host__ SparseDataset buildSparseData(std::string path, uint num_patterns, uint
         {
             // Create a vector to put all of the entries into
             std::stringstream ss(line);
-            col = -1;
+            col = 0;
             while(ss >> pair) // Read in each pair one at a time
             {
-                if(col == -1)
+                if(col == 0)
+                {
+                    // This is the number of non-zero features
+                }
+                else if(col == 1)
                 {
                     labels[row] = stoi(pair);
                 }
                 else
                 {
+                    if(col == 2) // starting a new row
+                    {
+                        rowIdx[row] = v_colIdx.size();
+                    }
                     std::string store;
                     std::istringstream in(pair);
+                    // Get Index
                     getline(in, store, ':');
                     int idx = stoi(store);
+                    // Get Value
                     getline(in, store);
                     float val = stof(store);
-                    SparseEntry entry = {idx, val};
-                    patterns[row].push_back(entry);
+
+                    // Push values to vectors
+                    v_colIdx.push_back(idx);
+                    v_values.push_back(val);
+                    
                 }
                 col ++;
             }
@@ -49,7 +65,15 @@ __host__ SparseDataset buildSparseData(std::string path, uint num_patterns, uint
 
     csv.close();
 
-    SparseDataset dataset = {patterns, labels};
-    return dataset;
+    // Build CSR_Data Struct
+    int *colIdx = new int[v_colIdx.size()];
+    std::copy(v_colIdx.begin(), v_colIdx.end(), colIdx);
+
+    float *values = new float[v_values.size()];
+    std::copy(v_values.begin(), v_values.end(), values);
+
+    CSR_Data data = {labels, rowIdx, colIdx, values};
+
+    return data;
 
 }

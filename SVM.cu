@@ -1,6 +1,6 @@
 /*
 A C++ support vector machine that uses stochastic gradient descent optimization
-implemented using the HOGWILD! algorithm for parrallization on GPUs.
+implemented using the HOGWILD! algorithm for parallelization on GPUs.
 
 by Derek Pepple
 */
