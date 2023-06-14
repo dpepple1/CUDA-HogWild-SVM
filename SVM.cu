@@ -177,11 +177,15 @@ __device__ void updateModel(float *d_weights, float *bias, float *wGrad, float b
     for(int dim = 0; dim < features; dim++)
     {
         // multiply by learning rate
-        d_weights[dim] -= learningRate * wGrad[dim]; // Would it be += or -= here?
+        // d_weights[dim] -= learningRate * wGrad[dim]; // Would it be += or -= here?
+
+        float deltaW = -1 * learningRate * wGrad[dim];
+        atomicAdd(&d_weights[dim], deltaW);
     }   
 
-    *bias -= learningRate * bGrad;
-    //*bias -=  0.5 * bGrad;
+    // *bias -= learningRate * bGrad;
+    float deltaB = -1 * learningRate * bGrad;
+    atomicAdd(bias, deltaB);
 
 }
 
