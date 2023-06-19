@@ -1,4 +1,4 @@
-#include "SVM.hpp"
+#include "../include/SVM.hpp"
 #include <fstream>
 #include <string>
 #include <vector>

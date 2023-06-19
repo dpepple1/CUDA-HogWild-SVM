@@ -1,4 +1,4 @@
-#include "sparse_data.cuh"
+#include "../include/sparse_data.cuh"
 
 
 // Returns a host vector so that it can be converted to a device_vector
@@ -64,6 +64,10 @@ __host__ CSR_Data buildSparseData(std::string path, uint num_patterns, uint num_
             }
             row++;
         }
+    }
+    else
+    {
+        std::cerr << "Error with file!" << std::endl;
     }   
 
     csv.close();

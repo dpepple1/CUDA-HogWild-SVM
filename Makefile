@@ -1,30 +1,39 @@
-NVCC = nvcc
-NVCC_FLAGS = -g -G -Xcompiler -Wall -gencode arch=compute_75,code=sm_75
+NVCC := nvcc
+NVCC_FLAGS := -g -G -Xcompiler -Wall -gencode arch=compute_75,code=sm_75
 
-all: main
+INC := include
+OBJ := obj
+SRC := src
+BIN := bin
 
-main: main.o SVM.o
+all: main sparse
+
+main: $(BIN)/main
+
+sparse: $(BIN)/sparse
+
+$(BIN)/main: $(OBJ)/main.o $(OBJ)/SVM.o
 	$(NVCC) $^ -o $@
 
-main.o: main.cpp SVM.hpp
+$(OBJ)/main.o: $(SRC)/main.cpp $(INC)/SVM.hpp
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
-SVM.o: SVM.cu SVM.hpp
+$(OBJ)/SVM.o: $(SRC)/SVM.cu $(INC)/SVM.hpp
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
-sparse_data.o: sparse_data.cu sparse_data.cuh
+$(OBJ)/sparse_data.o: $(SRC)/sparse_data.cu $(INC)/sparse_data.cuh
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 
 
-sparse: main_sparse.o sparse_data.o SVM_sparse.o
+$(BIN)/sparse: $(OBJ)/main_sparse.o $(OBJ)/sparse_data.o $(OBJ)/SVM_sparse.o
 	$(NVCC) $^ -o $@
 	
-main_sparse.o: main_sparse.cu
+$(OBJ)/main_sparse.o: $(SRC)/main_sparse.cu
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
-SVM_sparse.o: SVM_sparse.cu SVM_sparse.cuh
+$(OBJ)/SVM_sparse.o: $(SRC)/SVM_sparse.cu $(INC)/SVM_sparse.cuh
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 clean:
-	rm main *.o
+	rm $(BIN)/* $(OBJ)/*.o

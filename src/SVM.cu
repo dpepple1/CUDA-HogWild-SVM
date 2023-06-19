@@ -5,7 +5,7 @@ implemented using the HOGWILD! algorithm for parallelization on GPUs.
 by Derek Pepple
 */
 
-#include "SVM.hpp"
+#include "../include/SVM.hpp"
 #include <stdio.h>
 #include <unistd.h>
 

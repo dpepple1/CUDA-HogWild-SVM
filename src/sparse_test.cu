@@ -1,4 +1,4 @@
-#include "sparse_data.cuh"
+#include "../include/sparse_data.cuh"
 
 __global__ void testKernel(CSR_Data *d_data)
 {

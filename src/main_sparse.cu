@@ -1,16 +1,16 @@
-#include "SVM_sparse.cuh"
-#include "sparse_data.cuh"
+#include "../include/SVM_sparse.cuh"
+#include "../include/sparse_data.cuh"
 #include <fstream>
 #include <string>
 #include <vector>
 #include <sstream>
 
 #define FEATURES 47236
-#define PATTERNS 677399
-//#define PATTERNS 20242
+//#define PATTERNS 677399
+#define PATTERNS 20242
 
 
-#define DATA_PATH "data/rcv1/rcv1_test_labeled.binary"
+#define DATA_PATH "data/rcv1/rcv1_train_labeled.binary"
 
 int main(int argc, char *argv[])
 {  

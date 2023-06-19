@@ -5,7 +5,7 @@ implemented using the HOGWILD! algorithm for parallelization on GPUs.
 by Derek Pepple
 */
 
-#include "SVM_sparse.cuh"
+#include "../include/SVM_sparse.cuh"
 #include <stdio.h>
 #include <unistd.h>
 
