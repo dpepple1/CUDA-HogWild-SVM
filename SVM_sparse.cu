@@ -5,7 +5,7 @@ implemented using the HOGWILD! algorithm for parallelization on GPUs.
 by Derek Pepple
 */
 
-#include "SVM.hpp"
+#include "SVM_sparse.cuh"
 #include <stdio.h>
 #include <unistd.h>
 
@@ -32,6 +32,7 @@ __host__ void HOGSVM::initWeights(uint features)
     for(uint i = 0; i < features; i++)
     {
         float r = (float)rand() / (float)RAND_MAX;
+        r = (r * 2) - 1;
         weights[i] = r;
     } 
 }
@@ -68,9 +69,8 @@ __host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
     cudaFree(d_labels);
 }
 
-__host__ long HOGSVM::fit(float *patterns, uint features, int *labels, 
-                            uint numPairs, int blocks, int threadsPerBlock) {
-
+__host__ long HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int blocks, int threadsPerBlock)
+{
     auto begin = std::chrono::steady_clock::now();
     
     this->features = features;
@@ -78,7 +78,6 @@ __host__ long HOGSVM::fit(float *patterns, uint features, int *labels,
 
     // Create SVM weights and copy to GPU Memory
     weights = new float[features]();
-    //weights[features] = {};
     initWeights(features);
     
     bias = 0;
@@ -96,31 +95,32 @@ __host__ long HOGSVM::fit(float *patterns, uint features, int *labels,
     cudaMalloc((void**)&states, blocks * threadsPerBlock * sizeof(curandState_t));
 
     //Allocate GPU training data
-    int *d_labels = setupGPULabels(labels, numPairs);
-    float *d_patterns = setupGPUPatterns(patterns, features, numPairs);
-    
+    CSR_Data *d_data = CSRToGPU(data);
+
+
+    printf("Starting Threads\n");
     // Spawn threads to begin SGD Process
+
     SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, states,
-                         d_patterns, d_labels, features, numPairs, epochsPerCore, 
-                         d_weights, d_bias, learningRate);
+                        d_data, features, numPairs, epochsPerCore, d_weights,
+                        d_bias, learningRate);
 
     // Wait for threads to finish and collect weights
     cudaDeviceSynchronize();
-    
 
     cudaMemcpy(weights, d_weights, features * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(&bias, d_bias, sizeof(float), cudaMemcpyDeviceToHost);
     auto end = std::chrono::steady_clock::now();
     cudaFree(d_weights);
     cudaFree(states);
-    freeTrainingData(d_patterns, d_labels);
+    freeCSRGPU(d_data);
 
     return std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 }
 
-__host__ float HOGSVM::test(float *test_patterns, int *test_labels)
+__host__ float HOGSVM::test(CSR_Data data)
 {
-    float result = testAccuracy(test_patterns, test_labels, features, weights, bias, numPairs);
+    float result = testAccuracy(data, features, weights, bias, numPairs);
     return result;
 }
 
@@ -189,82 +189,110 @@ __device__ void updateModel(float *d_weights, float *bias, float *wGrad, float b
 
 }
 
+__device__ void updateSparseModel(float *d_weights, float *bias, float *wGrad, float bGrad, float learningRate, int *colIdxs, int sparsity)
+{
+
+    //Only update the features where the gradient will not be zero
+    for(int dim = 0; dim < sparsity; dim++)
+    {
+        //multiply by learning rate
+        float deltaW = -1 * learningRate * wGrad[dim];
+        int column = colIdxs[dim];
+        //atomicAdd(&d_weights[column], deltaW);
+        d_weights[column] += deltaW;
+    }
+
+    float deltaB = -1 * learningRate * bGrad;
+    //atomicAdd(bias, deltaB); 
+    *bias += deltaB;
+}
+
+
 // CUDA Kernel that performs HOGWILD! SGD
-__global__ void SGDKernel(uint threadCount, curandState_t *states, float *d_patterns, 
-                            int *d_labels, uint features, uint numPairs, 
-                            uint epochs, float *d_weights, float *d_bias,
-                            float learningRate) {   
+__global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_data,
+                            uint features, uint numPairs, uint epochs, float *d_weights,
+                            float *d_bias, float learningRate) {   
     // Compute Thread Index
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     // partition the dataset into chunks by moving thread specific pointer
+
     uint pairsPerThread = numPairs / threadCount;
-    float *patternStart = d_patterns + ((i * pairsPerThread) * features);
-    int *labelStart = d_labels + (i * pairsPerThread);
+    int *labelStart = d_data->labels + (i * pairsPerThread); // Pointer to first label for thread
+    int *sparsityStart = d_data->sparsity + (i * pairsPerThread);
+    int subsetStart = i * pairsPerThread; // Index to look in row start for row    
 
     // Declaring here to avoid re-allocing
-    float *copyWeights = new float[features];
-    float *wGrad = new float[features];
     curand_init(123, i, 0, &states[i]);
 
     // Start the training process
     for(uint epoch = 0; epoch < epochs; epoch++)
     {
-        // bool terminalEpoch = true;
 
         //Each epoch theoretically goes over the whole dataset
         for(uint iter = 0; iter < pairsPerThread; iter++)
         {
-             // Get random number in range of number of patterns in the chunk
+            // Get random number in range of number of patterns in the chunk
             float randNum = curand_uniform(&states[i]);
             uint randIdx = (uint) (randNum * pairsPerThread);
 
-            // Set a pointer to the start of a random row within the chunk
-            float *row = patternStart + (features * randIdx);
-            int *trueLabel = labelStart + randIdx;
+            int sparsity = *(sparsityStart + randIdx);
 
-            // Make a copy of the current weights and bias for this thread
-            memcpy(copyWeights, d_weights, features * sizeof(float));
+            // NOTE: Moved this into the body of the loop because the full size was too large
+            float *copyWeights = new float[sparsity];
+            float *wGrad = new float[sparsity];
+            
+            // Find start of values
+            int trueLabel = *(labelStart + randIdx);
+            int valuesStart = d_data->rowIdx[subsetStart + randIdx];
+            int colStart = valuesStart;
 
-            // Make prediction and set gradient
-            int decision = predict(copyWeights, *d_bias, row, features);
-            float bGrad = setGradient(wGrad, *trueLabel, decision, row, features);
+            // Copy over relavant weights
+            for(uint idx = 0; idx < sparsity; idx++)
+            {
+                // For each non-sparse value copy the weight from the matching column
+                copyWeights[idx] = d_weights[d_data->colIdx[colStart + idx]];
+            }
             
-            // if(terminalEpoch && bGrad != 0)
-            //     terminalEpoch = false;
             
-            // Update model vector
-            updateModel(d_weights, d_bias, wGrad, bGrad, features, learningRate);
+            //Make a prediction and set gradient
+            int decision = predict(copyWeights, *d_bias, d_data->values + valuesStart, sparsity); //Double check this 
+            float bGrad = setGradient(wGrad, trueLabel, decision, d_data->values + valuesStart, sparsity);
+            updateSparseModel(d_weights, d_bias, wGrad, bGrad, learningRate, d_data->colIdx + colStart, sparsity);
+
+            delete[] copyWeights;
+            delete[] wGrad;
         }
 
-        // If this thread has done nothing for the last epoch, stop
-        // if(terminalEpoch)
-        // {
-        //     float sample = testAccuracy(d_patterns, d_labels, features, copyWeights, *d_bias, numPairs);
-        //     printf("Thread %d finished after epoch %d with accuracy: %2.3f\n", i, epoch, sample * 100);
-        //     return;
-        // }
     }
-
-    delete[] copyWeights;
-    delete[] wGrad;
 }
 
-__host__ __device__ float testAccuracy(float *patterns, int *labels, uint features,
-                                        float *weights, float bias, uint numPairs) {
+__host__ __device__ float testAccuracy(CSR_Data data, uint features, float *weights, float bias, uint numPairs) 
+{
     int correct = 0;
     int total = 0;
 
+    float *copyWeights = new float[features];
+
     for(uint pair = 0; pair < numPairs; pair++)
     {
-        float *pattern = patterns + (pair * features);
-        int label = labels[pair];
+        int valuesStart = data.rowIdx[pair];
+        int colStart = valuesStart;
+        float *pattern = data.values + valuesStart;
+        int sparsity = data.sparsity[pair];
+        int label = data.labels[pair];
 
-        int prediction = predict(weights, bias, pattern, features);
+        for(int idx = 0; idx < sparsity; idx++)
+        {
+            // For each non-sparse value copy the weight from the matching column
+            copyWeights[idx] = weights[data.colIdx[colStart + idx]];
+        }
+
+        int prediction = predict(copyWeights, bias, pattern, sparsity);
 
         if(prediction == label)
             correct++;
-        
+
         total++;
     }
 
