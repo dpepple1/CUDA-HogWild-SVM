@@ -17,10 +17,13 @@ sparse_data.o: sparse_data.cu sparse_data.cuh
 
 
 
-sparse: main_sparse.o sparse_data.o
+sparse: main_sparse.o sparse_data.o SVM_sparse.o
 	$(NVCC) $^ -o $@
 	
-main_sparse.o: main_sparse.cpp
+main_sparse.o: main_sparse.cu
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+SVM_sparse.o: SVM_sparse.cu SVM_sparse.cuh
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 clean:
