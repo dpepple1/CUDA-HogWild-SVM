@@ -63,6 +63,4 @@ CUDA_DEV void updateSparseModel(float *d_weights, float *bias, float *wGrad, flo
 CUDA_HOS CUDA_DEV float testAccuracy(CSR_Data data, uint features, 
                             float *weights, float bias, uint numPairs);
 
-
-
 #endif
