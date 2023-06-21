@@ -5,7 +5,7 @@ implemented using the HOGWILD! algorithm for parallelization on GPUs.
 by Derek Pepple
 */
 
-#include "../include/SVM_sparse.cuh"
+#include "../include/SVM_sparse_managed.cuh"
 #include <stdio.h>
 #include <unistd.h>
 
@@ -22,18 +22,21 @@ __host__ HOGSVM::~HOGSVM()
 {
     //Free weights array
     if(weights != NULL)
-        delete[] weights;
+        cudaFree(weights);
 }
 
 __host__ void HOGSVM::initWeights(uint features)
 {
+    cudaMallocManaged(&weights, features * sizeof(float));
+
     srand((unsigned) time(NULL));
     
     for(uint i = 0; i < features; i++)
     {
         float r = (float)rand() / (float)RAND_MAX;
         r = (r * 2) - 1;
-        weights[i] = r;
+        //weights[i] = r;
+        weights[i] = 0;
     } 
 }
 
@@ -69,7 +72,7 @@ __host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
     cudaFree(d_labels);
 }
 
-__host__ long HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int blocks, int threadsPerBlock)
+__host__ long HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int blocks, int threadsPerBlock)
 {
     auto begin = std::chrono::steady_clock::now();
     
@@ -77,50 +80,36 @@ __host__ long HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int block
     this->numPairs = numPairs;
 
     // Create SVM weights and copy to GPU Memory
-    weights = new float[features]();
+    weights = 0;
     initWeights(features);
     
     bias = 0;
-    
-    float *d_weights = 0;
-    cudaMalloc(&d_weights, features * sizeof(float));
-    cudaMemcpy(d_weights, weights, features * sizeof(float), cudaMemcpyHostToDevice);
-    
-    float *d_bias = 0;
-    cudaMalloc(&d_bias, sizeof(float));
-    cudaMemcpy(d_bias, &bias, sizeof(float), cudaMemcpyHostToDevice);
+    cudaMallocManaged(&bias, sizeof(float));
     
     // Set up curand states
     curandState_t* states;
     cudaMalloc((void**)&states, blocks * threadsPerBlock * sizeof(curandState_t));
 
-    //Allocate GPU training data
-    CSR_Data *d_data = CSRToGPU(data);
-
-
     printf("Starting Threads\n");
     // Spawn threads to begin SGD Process
 
     SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, states,
-                        d_data, features, numPairs, epochsPerCore, d_weights,
-                        d_bias, learningRate);
+                        data, features, numPairs, epochsPerCore, weights,
+                        bias, learningRate);
 
     // Wait for threads to finish and collect weights
     cudaDeviceSynchronize();
 
-    cudaMemcpy(weights, d_weights, features * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(&bias, d_bias, sizeof(float), cudaMemcpyDeviceToHost);
     auto end = std::chrono::steady_clock::now();
-    cudaFree(d_weights);
+
     cudaFree(states);
-    freeCSRGPU(d_data);
 
     return std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 }
 
-__host__ float HOGSVM::test(CSR_Data data)
-{
-    float result = testAccuracy(data, features, weights, bias, numPairs);
+__host__ float HOGSVM::test(CSR_Data *data)
+{    
+    float result = testAccuracy(data, features, weights, *bias, numPairs);
     return result;
 }
 
@@ -131,7 +120,7 @@ __host__ float* HOGSVM::getWeights()
 
 __host__ float HOGSVM::getBias()
 {
-    return bias;
+    return *bias;
 }
 
 // ========================
@@ -199,7 +188,6 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     // partition the dataset into chunks by moving thread specific pointer
-
     uint pairsPerThread = numPairs / threadCount;
     int *labelStart = d_data->labels + (i * pairsPerThread); // Pointer to first label for thread
     int *sparsityStart = d_data->sparsity + (i * pairsPerThread);
@@ -250,7 +238,7 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
     }
 }
 
-__host__ __device__ float testAccuracy(CSR_Data data, uint features, float *weights, float bias, uint numPairs) 
+__host__ __device__ float testAccuracy(CSR_Data *data, uint features, float *weights, float bias, uint numPairs) 
 {
     int correct = 0;
     int total = 0;
@@ -259,16 +247,16 @@ __host__ __device__ float testAccuracy(CSR_Data data, uint features, float *weig
 
     for(uint pair = 0; pair < numPairs; pair++)
     {
-        int valuesStart = data.rowIdx[pair];
+        int valuesStart = data->rowIdx[pair];
         int colStart = valuesStart;
-        float *pattern = data.values + valuesStart;
-        int sparsity = data.sparsity[pair];
-        int label = data.labels[pair];
+        float *pattern = data->values + valuesStart;
+        int sparsity = data->sparsity[pair];
+        int label = data->labels[pair];
 
         for(int idx = 0; idx < sparsity; idx++)
         {
             // For each non-sparse value copy the weight from the matching column
-            copyWeights[idx] = weights[data.colIdx[colStart + idx]];
+            copyWeights[idx] = weights[data->colIdx[colStart + idx]];
         }
 
         int prediction = predict(copyWeights, bias, pattern, sparsity);
@@ -281,10 +269,3 @@ __host__ __device__ float testAccuracy(CSR_Data data, uint features, float *weig
 
     return (float)correct / (float)total;
 }
-
-
-// TODO:
-// Figure out how the bias gradient needs to be applied
-// Figure out how the multithreading interacts with the bias update. 
-
-// Before testing speedup, do something about the print statements in thread 1
