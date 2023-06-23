@@ -6,11 +6,12 @@ OBJ := obj
 SRC := src
 BIN := bin
 
-all: main sparse managed
+all: main sparse managed unified
 
 main: $(BIN)/main
 sparse: $(BIN)/sparse
 managed: $(BIN)/managed
+unified: $(BIN)/unified
 
 # Dense SVM
 $(BIN)/main: $(OBJ)/main.o $(OBJ)/SVM.o
@@ -46,6 +47,19 @@ $(OBJ)/SVM_sparse_managed.o: $(SRC)/SVM_sparse_managed.cu $(INC)/SVM_sparse_mana
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 $(OBJ)/sparse_data_managed.o: $(SRC)/sparse_data_managed.cu $(INC)/sparse_data_managed.cuh
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+#Sparse SVM with Unified Memory
+$(BIN)/unified: $(OBJ)/main_sparse_unified.o $(OBJ)/sparse_data_unified.o $(OBJ)/SVM_sparse_unified.o
+	$(NVCC) $^ -o $@
+
+$(OBJ)/main_sparse_unified.o: $(SRC)/main_sparse_unified.cu
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+$(OBJ)/SVM_sparse_unified.o: $(SRC)/SVM_sparse_unified.cu $(INC)/SVM_sparse_unified.cuh
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+$(OBJ)/sparse_data_unified.o: $(SRC)/sparse_data_unified.cu $(INC)/sparse_data_unified.cuh
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 clean:

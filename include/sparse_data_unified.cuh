@@ -31,7 +31,7 @@ struct CSR_Data
     unsigned long numObservations;
 };
 
-CUDA_HOS CSR_Data *buildSparseData(std::string path, uint num_patterns, uint num_features);
+CUDA_HOS CSR_Data buildSparseData(std::string path, uint num_patterns, uint num_features);
 CUDA_HOS CSR_Data *CSRToGPU(CSR_Data data);
 CUDA_HOS void freeCSRGPU(CSR_Data *data);
 CUDA_HOS void freeCSRHost(CSR_Data data);
