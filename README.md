@@ -33,7 +33,7 @@ bzip2 -d rcv1_test.binary.bz2
 Due to the nature of sparse formatted data, it each observation may have a unique number of non-zero values. To allow the program to know how much memory to allocate before reading in values, a number must be added to each line of the files indicating how many non-zero features are present. This process can be accelerated with the sparse_loaded.py utility. In rcv1 folder, run this to create the files:
 
 ```
-python3 sparse_labeler.py rcv1_train.binary rcv1_train_labeled.binary
-python3 sparse_labeler.py rcv1_test.binary rcv1_test_labeled.binary
+python3 ../pre_processing/sparse_labeler.py rcv1_train.binary rcv1_train_labeled.binary
+python3 ../pre_processing/sparse_labeler.py rcv1_test.binary rcv1_test_labeled.binary
 ```
 To test using these datsets, you must use either the sparse or managed executable. To choose which dataset to test on, check the associated main file and make sure to set the correct path as well as uncomment the correct #define statement for the number of patterns (larger number is for the test set).
