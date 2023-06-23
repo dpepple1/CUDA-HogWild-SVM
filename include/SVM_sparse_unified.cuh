@@ -20,7 +20,7 @@ by Derek Pepple
 #include <iostream>
 #include <curand_kernel.h>
 #include <chrono>
-#include "sparse_data_managed.cuh"
+#include "sparse_data_unified.cuh"
 
 
 class HOGSVM

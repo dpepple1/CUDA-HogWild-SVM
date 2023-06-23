@@ -89,7 +89,7 @@ __host__ CSR_Data buildSparseData(std::string path, uint num_patterns, uint num_
     cudaHostAlloc(&values, v_values.size() * sizeof(float), cudaHostAllocMapped);
     std::copy(v_values.begin(), v_values.end(), values);
 
-    CSR_Data data; = {sparsity, labels, rowIdx, colIdx, values, num_patterns, v_values.size()};
+    CSR_Data data = {sparsity, labels, rowIdx, colIdx, values, num_patterns, v_values.size()};
     return data;
 }
 
@@ -115,15 +115,15 @@ __host__ CSR_Data *CSRToGPU(CSR_Data data)
     // Build a new struct with new pointers and copy it to GPU
 
 	CSR_Data *h_d_data = NULL;
-	cudaHostAlloc(&temp, sizeof(CSR_Data), cudaHostAllocMapped);
+	cudaHostAlloc(&h_d_data, sizeof(CSR_Data), cudaHostAllocMapped);
 
-	temp->sparsity = data.sparsity;
-	temp->labels = data.labels;
-	temp->rowIdx = data.rowIdx;
-	temp->colIdx = data.colIdx;
-	temp->values = data.values;
-	temp->numPairs = data.numPairs;
-	temp->numObservations = data.numObservations;
+	h_d_data->sparsity = data.sparsity;
+	h_d_data->labels = data.labels;
+	h_d_data->rowIdx = data.rowIdx;
+	h_d_data->colIdx = data.colIdx;
+	h_d_data->values = data.values;
+	h_d_data->numPairs = data.numPairs;
+	h_d_data->numObservations = data.numObservations;
     
     return h_d_data;
 }
@@ -142,5 +142,5 @@ __host__ void freeCSRHost(CSR_Data data)
 	cudaFree(data.rowIdx);
 	cudaFree(data.colIdx);
 	cudaFree(data.colIdx);
-	cudaFree(temp.values);
+	cudaFree(data.values);
 }
