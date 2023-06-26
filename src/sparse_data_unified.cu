@@ -58,7 +58,7 @@ __host__ CSR_Data buildSparseData(std::string path, uint num_patterns, uint num_
                     std::istringstream in(pair);
                     // Get Index
                     getline(in, store, ':');
-                    int idx = stoi(store);
+                    int idx = stoi(store) -1;
                     // Get Value
                     getline(in, store);
                     float val = stof(store);
@@ -131,16 +131,16 @@ __host__ CSR_Data *CSRToGPU(CSR_Data data)
 // Frees memory allocated for CSR Dataset
 __host__ void freeCSRGPU(CSR_Data *h_d_data)
 {
-	cudaFree(h_d_data);
+	cudaFreeHost(h_d_data);
 }
 
 // deletes the arrays created with new in buildSparseData()
 __host__ void freeCSRHost(CSR_Data data)
 {
-    cudaFree(data.sparsity);
-	cudaFree(data.labels);
-	cudaFree(data.rowIdx);
-	cudaFree(data.colIdx);
-	cudaFree(data.colIdx);
-	cudaFree(data.values);
+	cudaFreeHost(data.sparsity);
+	cudaFreeHost(data.labels);
+	cudaFreeHost(data.rowIdx);
+	cudaFreeHost(data.colIdx);
+	cudaFreeHost(data.colIdx);
+	cudaFreeHost(data.values);
 }

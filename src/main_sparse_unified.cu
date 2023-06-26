@@ -59,16 +59,13 @@ int main(int argc, char *argv[])
     CSR_Data data = buildSparseData(DATA_PATH, PATTERNS, FEATURES);
     HOGSVM svc(0.000001, learningRate, epochs);
     
-	// Get GPU Pointers
-	CSR_Data *d_data = NULL;
-	CSR_Data *h_d_data = CSRToGPU(data);
-	cudaHostGetDevicePointer((void**)&d_data, h_d_data, 0);
+    // Get GPU Pointers
+    CSR_Data *d_data = NULL;
+    CSR_Data *h_d_data = CSRToGPU(data);
+    cudaHostGetDevicePointer((void**)&d_data, h_d_data, 0);
 	
     // Train the model and measure time
     long elapsedTime = svc.fit(d_data, FEATURES, PATTERNS, blocks, threadsPerBlock);
-
-    float accuracy = svc.test(&data);
-    std::cout << "Final Accuracy: " << accuracy * 100 << "%" << std::endl;
 
     // Print final weights
     float *weights = svc.getWeights();
@@ -81,13 +78,16 @@ int main(int argc, char *argv[])
 
     std::cout << "Bias: " << svc.getBias() << std::endl;
 
+	float accuracy = svc.test(&data);
+    std::cout << "Final Accuracy: " << accuracy * 100 << "%" << std::endl;
+
+
     std::cout << "Time to train: " << elapsedTime << " ns" << std::endl;
 
     if (batchMode)
         std::cerr << accuracy << "," <<  elapsedTime << std::endl;
     
-    freeCSRHost(data);
-	freeCSRGPU(h_d_data);
+    freeCSRGPU(h_d_data);
 
     return 0;
 }

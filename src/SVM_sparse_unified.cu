@@ -22,12 +22,12 @@ __host__ HOGSVM::~HOGSVM()
 {
     //Free weights array
     if(weights != NULL)
-        cudaFree(weights);
+        cudaFreeHost(weights);
 }
 
 __host__ void HOGSVM::initWeights(uint features)
 {
-    cudaMallocManaged(&weights, features * sizeof(float));
+    cudaHostAlloc(&weights, features * sizeof(float), cudaHostAllocMapped);
 
     srand((unsigned) time(NULL));
     
@@ -80,29 +80,35 @@ __host__ long HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int bloc
     this->numPairs = numPairs;
 
     // Create SVM weights and copy to GPU Memory
-    weights = 0;
+    weights = NULL;
     initWeights(features);
-    
-    bias = 0;
-    cudaMallocManaged(&bias, sizeof(float));
+    float *d_weights = NULL;
+    cudaHostGetDevicePointer((void**)&d_weights, weights, 0);    
+
+    bias = NULL;
+    cudaHostAlloc(&bias, sizeof(float), cudaHostAllocMapped);
+    float *d_bias = NULL;
+    cudaHostGetDevicePointer((void**)&d_bias, bias, 0);
     
     // Set up curand states
     curandState_t* states;
-    cudaMalloc((void**)&states, blocks * threadsPerBlock * sizeof(curandState_t));
+    cudaHostAlloc(&states, blocks * threadsPerBlock * sizeof(curandState_t), cudaHostAllocMapped);
+    curandState_t* d_states;
+    cudaHostGetDevicePointer((void**)&d_states, states, 0);
 
     printf("Starting Threads\n");
     // Spawn threads to begin SGD Process
 
-    SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, states,
-                        data, features, numPairs, epochsPerCore, weights,
-                        bias, learningRate);
+    SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, d_states,
+                        data, features, numPairs, epochsPerCore, d_weights,
+                        d_bias, learningRate);
 
     // Wait for threads to finish and collect weights
     cudaDeviceSynchronize();
 
     auto end = std::chrono::steady_clock::now();
 
-    cudaFree(states);
+    cudaFreeHost(states);
 
     return std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 }
@@ -222,6 +228,9 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             for(uint idx = 0; idx < sparsity; idx++)
             {
                 // For each non-sparse value copy the weight from the matching column
+                // int index = d_data->colIdx[colStart + idx];
+                // float temp = d_weights[index];
+                // copyWeights[idx] = temp;
                 copyWeights[idx] = d_weights[d_data->colIdx[colStart + idx]];
             }
             
@@ -234,6 +243,7 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             delete[] copyWeights;
             delete[] wGrad;
         }
+        printf("Finished Epoch %d\n", epoch);
 
     }
 }
