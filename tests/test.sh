@@ -1,16 +1,16 @@
 # /bin/sh
 
-t=1
+t=2
 
 if [ $# -ge 2 ]; then
 
-    while [ $t -lt 30 ]
+    while [ $t -lt 1025 ]
     do
         ns=$($1 -t $t -m 2>&1 > /dev/null);
         echo "$t,$ns" >> $2;
      
         echo "Finished test with $t threads"
-        t=$(($t + 1));
+        t=$(($t * 2));
     done
 
 else

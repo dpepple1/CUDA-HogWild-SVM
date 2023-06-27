@@ -37,3 +37,11 @@ python3 ../pre_processing/sparse_labeler.py rcv1_train.binary rcv1_train_labeled
 python3 ../pre_processing/sparse_labeler.py rcv1_test.binary rcv1_test_labeled.binary
 ```
 To test using these datsets, you must use either the sparse or managed executable. To choose which dataset to test on, check the associated main file and make sure to set the correct path as well as uncomment the correct #define statement for the number of patterns (larger number is for the test set).
+
+##Other Notes:
+###Timeout
+When tested on the Nvidia Jetson TX1, the unified sparse dataset was noted as havinga much longer kernel runtime. On Linux, CUDA kernel launches are limited to 5 seconds to prevent the GUI interface of teh device from hanging. To accurately test the application this timeout protection needs to be disabled. Nvidia reccomends against doing this however. Here is how to disable the timeout:
+```
+sudo -s 
+echo N > /sys/kernel/debug/gpu.0/timeouts_enabled
+```

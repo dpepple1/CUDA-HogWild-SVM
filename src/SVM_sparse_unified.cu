@@ -74,7 +74,7 @@ __host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
 
 __host__ long HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int blocks, int threadsPerBlock)
 {
-    auto begin = std::chrono::steady_clock::now();
+    //auto begin = std::chrono::steady_clock::now();
     
     this->features = features;
     this->numPairs = numPairs;
@@ -98,15 +98,18 @@ __host__ long HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int bloc
 
     printf("Starting Threads\n");
     // Spawn threads to begin SGD Process
-
+    
+    auto begin = std::chrono::steady_clock::now();
     SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, d_states,
                         data, features, numPairs, epochsPerCore, d_weights,
                         d_bias, learningRate);
 
     // Wait for threads to finish and collect weights
     cudaDeviceSynchronize();
-
     auto end = std::chrono::steady_clock::now();
+
+    cudaError_t error = cudaGetLastError();
+    std::cout << "Last Error: " << error << std::endl;
 
     cudaFreeHost(states);
 
@@ -243,7 +246,6 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             delete[] copyWeights;
             delete[] wGrad;
         }
-        printf("Finished Epoch %d\n", epoch);
 
     }
 }
