@@ -157,7 +157,7 @@ __host__ __device__ int predict(float *weights, float bias, float *pattern, uint
 // Sets the wGrad array to the gradient of the hinge loss and returns the bGrad
 __device__ float setGradient(float *wGrad, int trueLabel, int decision, float *row, uint features)
 {
-    if (1 - trueLabel * decision <= 0)
+    if ((1 - trueLabel * decision) <= 0)
     {
         memset(wGrad, 0, features * sizeof(float));
         return 0;
@@ -170,6 +170,22 @@ __device__ float setGradient(float *wGrad, int trueLabel, int decision, float *r
         }
         return (float) -trueLabel;
     }
+}
+
+// Sets the wGrad array to the gradient of the hinge loss and returns the bGrad 
+// ***WITHOUT USING CONTROL FLOW DEVIATIONS (IF BLOCKS)***
+__device__ float setGradientSIMT(float *wGrad, int trueLabel, int decision, float *row, uint features)
+{
+    // Whether the prediction was right or wrong
+    int classification = 1 - trueLabel * decision;
+    // Will be zero if incorrect and 1 if correct
+    int modifier = (int)(classification > 0);
+
+    for(int comp = 0; comp < features; comp++)
+    {
+        wGrad[comp] = -trueLabel * row[comp] * modifier;
+    }
+    return (float) (-trueLabel) * (modifier);   
 }
 
 // Use the gradient to update the model vector and bias
@@ -241,7 +257,7 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             
             //Make a prediction and set gradient
             int decision = predict(copyWeights, *d_bias, d_data->values + valuesStart, sparsity); //Double check this 
-            float bGrad = setGradient(wGrad, trueLabel, decision, d_data->values + valuesStart, sparsity);
+            float bGrad = setGradientSIMT(wGrad, trueLabel, decision, d_data->values + valuesStart, sparsity);
             updateSparseModel(d_weights, d_bias, wGrad, bGrad, learningRate, d_data->colIdx + colStart, sparsity);
 
             delete[] copyWeights;

@@ -59,6 +59,7 @@ CUDA_GLO void SGDKernel(uint threadCount, curandState_t *states, float *d_patter
                             float learningRate);
 CUDA_HOS CUDA_DEV int predict(float *d_weights, float bias, float *d_pattern, uint features );       
 CUDA_DEV float setGradient(float *wGrad, int trueLabel, int decision, float *row, uint features);
+CUDA_DEV float setGradientSIMT(float *wGrad, int trueLabel, int decision, float *row, uint features);
 CUDA_DEV void updateModel(float *d_weights, float *bias, float *wGrad, uint features, float learningRate);
 CUDA_HOS CUDA_DEV float testAccuracy(float *patterns, int *labels, uint features, 
                             float *weights, float bias, uint numPairs);
