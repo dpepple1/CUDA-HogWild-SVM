@@ -71,7 +71,7 @@ __host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
 
 __host__ long HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int blocks, int threadsPerBlock)
 {
-    auto begin = std::chrono::steady_clock::now();
+    //auto begin = std::chrono::steady_clock::now();
     
     this->features = features;
     this->numPairs = numPairs;
@@ -100,17 +100,18 @@ __host__ long HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int block
 
     printf("Starting Threads\n");
     // Spawn threads to begin SGD Process
-
+    auto begin = std::chrono::steady_clock::now();
     SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, states,
                         d_data, features, numPairs, epochsPerCore, d_weights,
                         d_bias, learningRate);
 
     // Wait for threads to finish and collect weights
     cudaDeviceSynchronize();
+    auto end = std::chrono::steady_clock::now();
 
     cudaMemcpy(weights, d_weights, features * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(&bias, d_bias, sizeof(float), cudaMemcpyDeviceToHost);
-    auto end = std::chrono::steady_clock::now();
+    // auto end = std::chrono::steady_clock::now();
     cudaFree(d_weights);
     cudaFree(states);
     freeCSRGPU(d_data);
@@ -150,13 +151,14 @@ __host__ __device__ int predict(float *weights, float bias, float *pattern, uint
 
     dotProd += bias;
 
-    return dotProd > 0 ? 1 : -1; // Must be either 1 or -1
+    //return dotProd > 0 ? 1 : -1; // Must be either 1 or -1
+    return ((dotProd > 0) * 2) - 1;
 }
 
 // Sets the wGrad array to the gradient of the hinge loss and returns the bGrad
 __device__ float setGradient(float *wGrad, int trueLabel, int decision, float *row, uint features)
 {
-    if (1 - trueLabel * decision <= 0)
+    if ((1 - trueLabel * decision) <= 0)
     {
         memset(wGrad, 0, features * sizeof(float));
         return 0;
@@ -169,6 +171,22 @@ __device__ float setGradient(float *wGrad, int trueLabel, int decision, float *r
         }
         return (float) -trueLabel;
     }
+}
+
+// Sets the wGrad array to the gradient of the hinge loss and returns the bGrad 
+// ***WITHOUT USING CONTROL FLOW DEVIATIONS (IF BLOCKS)***
+__device__ float setGradientSIMT(float *wGrad, int trueLabel, int decision, float *row, uint features)
+{
+    // Whether the prediction was right or wrong
+    int classification = 1 - trueLabel * decision;
+    // Will be zero if incorrect and 1 if correct
+    int modifier = (int)(classification > 0);
+
+    for(int comp = 0; comp < features; comp++)
+    {
+        wGrad[comp] = -trueLabel * row[comp] * modifier;
+    }
+    return (float) (-trueLabel) * (modifier);   
 }
 
 // Use the gradient to update the model vector and bias
@@ -240,7 +258,7 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             
             //Make a prediction and set gradient
             int decision = predict(copyWeights, *d_bias, d_data->values + valuesStart, sparsity); //Double check this 
-            float bGrad = setGradient(wGrad, trueLabel, decision, d_data->values + valuesStart, sparsity);
+            float bGrad = setGradientSIMT(wGrad, trueLabel, decision, d_data->values + valuesStart, sparsity);
             updateSparseModel(d_weights, d_bias, wGrad, bGrad, learningRate, d_data->colIdx + colStart, sparsity);
 
             delete[] copyWeights;

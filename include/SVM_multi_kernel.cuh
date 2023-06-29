@@ -56,7 +56,7 @@ class HOGSVM
 
 CUDA_GLO void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_data,
                             uint features, uint numPairs, uint epochs, float *d_weights,
-                            float *bias, float learningRate);
+                            float *bias, float learningRate, int subsetOffset);
 CUDA_HOS CUDA_DEV int predict(float *d_weights, float bias, float *d_pattern, uint features );       
 CUDA_DEV float setGradient(float *wGrad, int trueLabel, int decision, float *row, uint features);
 CUDA_DEV float setGradientSIMT(float *wGrad, int trueLabel, int decision, float *row, uint features);

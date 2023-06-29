@@ -20,7 +20,13 @@ by Derek Pepple
 #include <iostream>
 #include <curand_kernel.h>
 #include <chrono>
-#include "sparse_data.cuh"
+#include "sparse_data_unified.cuh"
+
+struct timing_t
+{
+	long kernelTime;
+	long mallocTime;
+};
 
 
 class HOGSVM
@@ -31,9 +37,9 @@ class HOGSVM
         ~HOGSVM();
 
         // Public methods
-        CUDA_HOS long fit(CSR_Data data, uint features, uint numPairs,
+        CUDA_HOS timing_t  fit(CSR_Data *data, uint features, uint numPairs,
                             int blocks, int threadsPerBlock);
-        CUDA_HOS float test(CSR_Data data);
+        CUDA_HOS float test(CSR_Data *data);
         CUDA_HOS float* getWeights();
         CUDA_HOS float getBias();
 
@@ -45,7 +51,7 @@ class HOGSVM
         uint features;
         uint numPairs;
 
-        float bias;
+        float *bias;
         float *weights;
 
         CUDA_HOS void initWeights(uint features);
@@ -61,7 +67,9 @@ CUDA_HOS CUDA_DEV int predict(float *d_weights, float bias, float *d_pattern, ui
 CUDA_DEV float setGradient(float *wGrad, int trueLabel, int decision, float *row, uint features);
 CUDA_DEV float setGradientSIMT(float *wGrad, int trueLabel, int decision, float *row, uint features);
 CUDA_DEV void updateSparseModel(float *d_weights, float *bias, float *wGrad, float bGrad, float learningRate, int *colIdxs, int sparsity);
-CUDA_HOS CUDA_DEV float testAccuracy(CSR_Data data, uint features, 
+CUDA_HOS CUDA_DEV float testAccuracy(CSR_Data *data, uint features, 
                             float *weights, float bias, uint numPairs);
+
+
 
 #endif
