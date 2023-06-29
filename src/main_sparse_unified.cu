@@ -6,11 +6,11 @@
 #include <sstream>
 
 #define FEATURES 47236
-#define PATTERNS 677399
-// #define PATTERNS 20242
+// #define PATTERNS 677399
+#define PATTERNS 20242
 
 
-#define DATA_PATH "data/rcv1/rcv1_test_labeled.binary"
+#define DATA_PATH "data/rcv1/rcv1_train_labeled.binary"
 
 int main(int argc, char *argv[])
 {  
@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
     cudaHostGetDevicePointer((void**)&d_data, h_d_data, 0);
 	
     // Train the model and measure time
-    long elapsedTime = svc.fit(d_data, FEATURES, PATTERNS, blocks, threadsPerBlock);
+    timing_t time = svc.fit(d_data, FEATURES, PATTERNS, blocks, threadsPerBlock);
 
     // Print final weights
     float *weights = svc.getWeights();
@@ -82,10 +82,11 @@ int main(int argc, char *argv[])
     std::cout << "Final Accuracy: " << accuracy * 100 << "%" << std::endl;
 
 
-    std::cout << "Time to train: " << elapsedTime << " ns" << std::endl;
+    std::cout << "Kernel Time: " << time.kernelTime << " ns" << std::endl;
+    std::cout << "Total Time: " << time.kernelTime + time.mallocTime << " ns" << std::endl;
 
     if (batchMode)
-        std::cerr << accuracy << "," <<  elapsedTime << std::endl;
+        std::cerr << accuracy << "," <<  time.kernelTime << "," << time.mallocTime << "," << time.kernelTime + time.mallocTime << std::endl;
     
     freeCSRGPU(h_d_data);
 
