@@ -1,5 +1,5 @@
 NVCC := nvcc
-NVCC_FLAGS := -g -G -Xcompiler -Wall -gencode arch=compute_53,code=sm_53
+NVCC_FLAGS := -g -G -Xcompiler -Wall -gencode arch=compute_75,code=sm_75
 
 INC := include
 OBJ := obj
