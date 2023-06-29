@@ -151,7 +151,8 @@ __host__ __device__ int predict(float *weights, float bias, float *pattern, uint
 
     dotProd += bias;
 
-    return dotProd > 0 ? 1 : -1; // Must be either 1 or -1
+    //return dotProd > 0 ? 1 : -1; // Must be either 1 or -1
+    return ((dotProd > 0) * 2) - 1;
 }
 
 // Sets the wGrad array to the gradient of the hinge loss and returns the bGrad
