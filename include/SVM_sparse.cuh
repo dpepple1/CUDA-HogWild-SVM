@@ -22,6 +22,11 @@ by Derek Pepple
 #include <chrono>
 #include "sparse_data.cuh"
 
+struct timing_t
+{
+  long kernelTime;
+  long mallocTime;  
+};
 
 class HOGSVM
 {
@@ -31,7 +36,7 @@ class HOGSVM
         ~HOGSVM();
 
         // Public methods
-        CUDA_HOS long fit(CSR_Data data, uint features, uint numPairs,
+        CUDA_HOS timing_t fit(CSR_Data data, uint features, uint numPairs,
                             int blocks, int threadsPerBlock);
         CUDA_HOS float test(CSR_Data data);
         CUDA_HOS float* getWeights();

@@ -69,10 +69,10 @@ __host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
     cudaFree(d_labels);
 }
 
-__host__ long HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int blocks, int threadsPerBlock)
+__host__ timing_t HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int blocks, int threadsPerBlock)
 {
-    //auto begin = std::chrono::steady_clock::now();
-    
+    auto mallocStart = std::chrono::steady_clock::now();
+
     this->features = features;
     this->numPairs = numPairs;
 
@@ -100,7 +100,7 @@ __host__ long HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int block
 
     printf("Starting Threads\n");
     // Spawn threads to begin SGD Process
-    auto begin = std::chrono::steady_clock::now();
+    auto kernelStart = std::chrono::steady_clock::now();
     SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, states,
                         d_data, features, numPairs, epochsPerCore, d_weights,
                         d_bias, learningRate);
@@ -116,7 +116,11 @@ __host__ long HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int block
     cudaFree(states);
     freeCSRGPU(d_data);
 
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+    timing_t time;
+    time.mallocTime = std::chrono::duration_cast<std::chrono::nanoseconds>(kernelStart - mallocStart).count();
+    time.kernelTime = std::chrono::duration_cast<std::chrono::nanoseconds>(end - kernelStart).count();
+
+    return time;
 }
 
 __host__ float HOGSVM::test(CSR_Data data)
