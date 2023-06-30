@@ -4,8 +4,15 @@
 ## Introduction
 The purpose of this project is to explore the potential and limitations of parallelized stochastic gradient descient when executed using an accelerator architecture. In this case, several variants of Support Vector Machines have been implemented using Nvidia CUDA for operation on a GPU. 
 
+## Folders
+### HogWild
+This folder contains CUDA code to implement a SVM using the HogWild! algorithm proposed by Feng Niu et al. on an Nvidia GPU.
+
+### HogWild++
+This folder is similar to HogWild, however it uses HogWild++, an improved algorithm proprosed by Huan Zhang et al.  
+
 ## Operation
-To build executables run 
+To build executable run 
 ```
 make all
 ```
