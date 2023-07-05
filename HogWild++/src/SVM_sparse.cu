@@ -1,6 +1,6 @@
 /*
 A C++ support vector machine that uses stochastic gradient descent optimization
-implemented using the HOGWILD! algorithm for parallelization on GPUs.
+implemented using the HOGWILD++ algorithm for parallelization on GPUs.
 
 by Derek Pepple
 */
@@ -10,10 +10,10 @@ by Derek Pepple
 #include <unistd.h>
 
 
-__host__ HOGSVM::HOGSVM(float lambda, float learningRate, uint epochsPerCore)
+__host__ HOGSVM::HOGSVM(float learningRate, float stepDecay, uint epochsPerCore)
 {
-    this->lambda = lambda; // Still am not using anywhere
     this->learningRate = learningRate;
+    this->stepDecay = stepDecay;
     this->epochsPerCore = epochsPerCore;
     weights = NULL;
 }
@@ -25,18 +25,18 @@ __host__ HOGSVM::~HOGSVM()
         delete[] weights;
 }
 
-__host__ void HOGSVM::initWeights(uint features)
-{
-    srand((unsigned) time(NULL));
+// __host__ void HOGSVM::initWeights(uint features)
+// {
+//     srand((unsigned) time(NULL));
     
-    for(uint i = 0; i < features; i++)
-    {
-        float r = (float)rand() / (float)RAND_MAX;
-        r = (r * 2) - 1;
-        // weights[i] = r;
-        weights[i] = 0;
-    } 
-}
+//     for(uint i = 0; i < features; i++)
+//     {
+//         float r = (float)rand() / (float)RAND_MAX;
+//         r = (r * 2) - 1;
+//         // weights[i] = r;
+//         weights[i] = 0;
+//     } 
+// }
 
 // Copies labels of training data to GPU memory
 __host__ int *HOGSVM::setupGPULabels(int *labels, uint numPairs)
@@ -72,24 +72,18 @@ __host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
 
 __host__ timing_t HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int blocks, int threadsPerBlock)
 {
-    auto mallocStart = std::chrono::steady_clock::now();
-
     this->features = features;
     this->numPairs = numPairs;
 
-    // Create SVM weights and copy to GPU Memory
+    // Calculate special coefficients
+    // DO NOT INCLUDE IN TIMING
+    float beta = newtonRaphson(0.5, blocks);
+    float lambda =  1 - pow(beta, blocks - 1); 
+
+    auto mallocStart = std::chrono::steady_clock::now();
+    // Create a local copy of weights
     weights = new float[features]();
-    initWeights(features);
-    
     bias = 0;
-    
-    float *d_weights = 0;
-    cudaMalloc(&d_weights, features * sizeof(float));
-    cudaMemcpy(d_weights, weights, features * sizeof(float), cudaMemcpyHostToDevice);
-    
-    float *d_bias = 0;
-    cudaMalloc(&d_bias, sizeof(float));
-    cudaMemcpy(d_bias, &bias, sizeof(float), cudaMemcpyHostToDevice);
     
     // Set up curand states
     curandState_t* states;
@@ -98,24 +92,49 @@ __host__ timing_t HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int b
     //Allocate GPU training data
     CSR_Data *d_data = CSRToGPU(data);
 
+    const size_t weightSize = sizeof(float) * features;
+    
+    // Create a token in global GPU Memory
+    int *token = NULL;
+    cudaMalloc(&token, sizeof(int));
+    cudaMemset(token, 0, sizeof(int));
+
+    // Because shared memory doesnt work, use global memory (THIS IS ALOT OF MEMORY)
+    float *activeWeights  = NULL;
+    cudaMalloc(&activeWeights, features * sizeof(float) * blocks);
+    
+    float *snapshotWeights = NULL;
+    cudaMalloc(&snapshotWeights, features * sizeof(float) * blocks);
+    
+    float *activeBias = NULL;
+    cudaMalloc(&activeBias, sizeof(float) * blocks);
+
+    float *snapshotBias = NULL;
+    cudaMalloc(&snapshotBias, sizeof(float) * blocks);
+
 
     printf("Starting Threads\n");
     // Spawn threads to begin SGD Process
     auto kernelStart = std::chrono::steady_clock::now();
-    SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, states,
-                        d_data, features, numPairs, epochsPerCore, d_weights,
-                        d_bias, learningRate);
+    SGDKernel<<<blocks, threadsPerBlock, weightSize>>>(blocks * threadsPerBlock, states, d_data, 
+                        activeWeights, snapshotWeights, activeBias, snapshotBias,
+                        features, numPairs, epochsPerCore, learningRate,
+                        stepDecay, token, beta, lambda, blocks);
 
     // Wait for threads to finish and collect weights
     cudaDeviceSynchronize();
     auto end = std::chrono::steady_clock::now();
 
-    cudaMemcpy(weights, d_weights, features * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(&bias, d_bias, sizeof(float), cudaMemcpyDeviceToHost);
-    // auto end = std::chrono::steady_clock::now();
-    cudaFree(d_weights);
+    cudaMemcpy(weights, activeWeights, sizeof(float) * features, cudaMemcpyDeviceToHost);
+    cudaMemcpy(&bias, activeBias, sizeof(float), cudaMemcpyDeviceToHost);
     cudaFree(states);
     freeCSRGPU(d_data);
+    cudaFree(activeWeights);
+    cudaFree(snapshotWeights);
+    cudaFree(activeBias);
+    cudaFree(snapshotBias);
+    cudaFree(token);
+    
 
     cudaError_t error = cudaGetLastError();
     std::cout << "Last Error: " << error << std::endl;
@@ -219,10 +238,19 @@ __device__ void updateSparseModel(float *d_weights, float *bias, float *wGrad, f
 
 // CUDA Kernel that performs HOGWILD! SGD
 __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_data,
-                            uint features, uint numPairs, uint epochs, float *d_weights,
-                            float *d_bias, float learningRate) {   
+                            float *activeWeights, float *snapshotWeights, float *activeBias, float *snapshotBias,
+                            uint features, uint numPairs, uint epochs, float learningRate,
+                            float stepDecay, int *token, float beta, 
+                            float lambda, int blocks) {   
     // Compute Thread Index
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // Get block specific pointer to seperate weights
+    float *blockLocalWeights = activeWeights + (blockIdx.x * features);
+    float *blockSnapshotWeights = snapshotWeights + (blockIdx.x * features);
+
+    float *blockLocalBias = activeBias + blockIdx.x;
+    float *blockSnapshotBias = snapshotBias + blockIdx.x;
 
     // partition the dataset into chunks by moving thread specific pointer
 
@@ -234,10 +262,11 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
     // Declaring here to avoid re-allocing
     curand_init(123, i, 0, &states[i]);
 
+
+    int sendToken = -1;
     // Start the training process
     for(uint epoch = 0; epoch < epochs; epoch++)
     {
-
         //Each epoch theoretically goes over the whole dataset
         for(uint iter = 0; iter < pairsPerThread; iter++)
         {
@@ -260,19 +289,58 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             for(uint idx = 0; idx < sparsity; idx++)
             {
                 // For each non-sparse value copy the weight from the matching column
-                copyWeights[idx] = d_weights[d_data->colIdx[colStart + idx]];
+                copyWeights[idx] = blockLocalWeights[d_data->colIdx[colStart + idx]];
             }
             
             
             //Make a prediction and set gradient
-            int decision = predict(copyWeights, *d_bias, d_data->values + valuesStart, sparsity); //Double check this 
+            int decision = predict(copyWeights, *blockLocalBias, d_data->values + valuesStart, sparsity); //Double check this 
             float bGrad = setGradientSIMT(wGrad, trueLabel, decision, d_data->values + valuesStart, sparsity);
-            updateSparseModel(d_weights, d_bias, wGrad, bGrad, learningRate, d_data->colIdx + colStart, sparsity);
+            updateSparseModel(blockLocalWeights, blockLocalBias, wGrad, bGrad, learningRate, d_data->colIdx + colStart, sparsity);
 
             delete[] copyWeights;
             delete[] wGrad;
-        }
+            
+            // After an epoch, synchronize to next block
+            if(sendToken == iter)
+            {
+                *(token) = blockIdx.x + 1;
+                if(*token >= blocks)
+                    *token = 0;
+                sendToken = -1;
+            }
+            // Check token and perform synchronization step if necessary
+            if((*token) == blockIdx.x and threadIdx.x == 0) // ONLY FIRST THREAD **CHECK LATER**
+            {
+                // Make sure you dont update out of bounds!
+                float *nextLocalWeights = NULL;
+                if(blockIdx.x + 1 >= blocks)
+                    nextLocalWeights = activeWeights;
+                else
+                    nextLocalWeights = blockLocalWeights + features;
 
+                // Handling one component at a time in the attempt to be more efficient
+                for(int dim = 0; dim < features; dim++)
+                {
+                    float weightDifference = blockLocalWeights[dim] - snapshotWeights[dim];
+                    // Refer to HogWild++ synchronization update formula
+                    blockSnapshotWeights[dim] = lambda * nextLocalWeights[dim] + (1 - lambda) * blockSnapshotWeights[dim] + beta * pow(stepDecay, epoch*iter) * weightDifference;
+                    // Update next active weights
+                    atomicAdd(nextLocalWeights + dim, beta * pow(stepDecay, epoch *iter) * weightDifference);
+                    blockLocalWeights[dim] = blockSnapshotWeights[dim];
+                }
+
+                // Update Bias (Inferred from weights calculation)
+                float *nextLocalBias = blockLocalBias + 1;
+                float biasDifference = *blockLocalBias - *snapshotBias;
+                *blockSnapshotBias = lambda * (*nextLocalBias) + (1-lambda) * (*blockSnapshotBias) + beta * pow(stepDecay, epoch*iter) * biasDifference;
+                atomicAdd(nextLocalBias, beta * pow(stepDecay, epoch*iter) * biasDifference);
+                *blockLocalBias = *blockSnapshotBias;
+
+                sendToken = iter;
+                *token = -1;
+            }
+        }
     }
 }
 
@@ -306,6 +374,7 @@ __host__ __device__ float testAccuracy(CSR_Data data, uint features, float *weig
 
     return (float)correct / (float)total;
 }
+
 
 
 // TODO:
