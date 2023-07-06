@@ -11,11 +11,43 @@ This folder contains CUDA code to implement a SVM using the HogWild! algorithm p
 ### HogWild++
 This folder is similar to HogWild, however it uses HogWild++, an improved algorithm proprosed by Huan Zhang et al.  
 
+## Project Layout
+Both the HogWild and HogWild++ folders contain variations of a SGD SVM that are built on a similar skeleton code. In each folder, the code was duplicated several times and altered to test a different CUDA functionality. You will notice several files that share similar naming schemes.  
+
+### HogWild!
+#### Implementations
+- **Dense (Generic):** Reads in data represented in a dense format. Uses cudaMallocs and cudaMemcpys to transfer data between device and host memory. 
+- **Sparse:** Reads in data represented in a sparse format (col:value). Uses cudaMallocs and cudaMemcpys to transfer data between device and host memory.
+- **Sparse Managed:** Reads in data represented in a sparse format (col:value). Uses "managed memory" instead of manually malloced and copied data as in previous implementations.
+- **Sparse Unified:** Reads in data represented in a sparse format (col:value). Uses "Zero Copy Memory" instead of manually malloced and copied data. Meant to be tested using a NVIDIA Jetson device that has built in unified host and device memory.
+- **Multi Kernel:** Reads in data represented in a sparse format (col:value). Runs two kernels in parallel both performing SGD optimization.
+#### Components
+- **SVM:** Contains the class definition for the Support Vector Machine as well as the device functions and kernel that perform SGD.
+- **sparse_data:** Contains the code to read in sparse data from the file system. 
+- **main:** Contains main function to run the program.
+
+### HogWild++
+#### Implementations
+- **Sparse:** Reads in data represented in a sparse format (col:value). Uses cudaMallocs and cudaMemcpys to transfer betweeen device and host memory.
+
+#### Components
+- **All components from HogWild!**
+- **newton_raphson:** Contains code to calculate the value of Beta (synchronization decay) as dependent on the number of clusters. 
+
+
 ## Operation
-To build executable run 
+To build executables run 
 ```
 make all
+
+# OR (for individual executables)
+make main       #HogWild! only
+make sparse
+make unified    #HogWild! only
+make managed    #HogWild! only
+make multi      #HogWild! only
 ```
+from within either the HogWild or HogWild++ folder.
 
 ## Data
 ### Dense Data

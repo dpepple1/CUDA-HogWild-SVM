@@ -10,7 +10,7 @@
 #define PATTERNS 20242
 
 
-#define DATA_PATH "data/rcv1/rcv1_train_labeled.binary"
+#define DATA_PATH "../data/rcv1/rcv1_train_labeled.binary"
 
 int main(int argc, char *argv[])
 {  

@@ -1,14 +1,21 @@
-#include "../include/SVM.hpp"
+#include "../include/SVM_sparse.cuh"
+#include "../include/sparse_data.cuh"
 #include <fstream>
 #include <string>
 #include <vector>
 #include <sstream>
 
-#define FEATURES 10
-#define PATTERNS 10000
+// RCV1
+// #define FEATURES 47236
+// #define PATTERNS 20242 //TRAIN
+// #define PATTERNS 677399 //TEST
+// #define DATA_PATH "../data/rcv1/rcv1_train_labeled.binary" // TRAIN
+// #define DATA_PATH "../data/rcv1/rcv1_test_labeled.binary" // TEST
 
-#define DATA_PATH "f10_std100"
-//#define DATA_PATH "lin_sep"
+// WEBSPAM
+#define FEATURES 254
+#define PATTERNS 350000
+#define DATA_PATH "../data/webspam/webspam_labeled.svm"
 
 int main(int argc, char *argv[])
 {  
@@ -16,6 +23,7 @@ int main(int argc, char *argv[])
     int blocks = 1;
     int threadsPerBlock = 32;
     float learningRate = 0.1;
+    float stepDecay = 0.01;
     int epochs = 10;
     bool batchMode = false;
     
@@ -42,6 +50,11 @@ int main(int argc, char *argv[])
             arg++;
             epochs = std::stoi(argv[arg]);
         }
+        else if (not strcmp(argv[arg], "-d")) // Step Decay
+        {
+            arg++;
+            stepDecay = std::stof(argv[arg]);
+        }
         else if (not strcmp(argv[arg], "-m")) // Run in  mode
         {
             batchMode = true;
@@ -52,74 +65,36 @@ int main(int argc, char *argv[])
         }
     }
 
-    
     // Data
-    float patterns[PATTERNS][FEATURES];
-    int labels[PATTERNS];
+    CSR_Data data = buildSparseData(DATA_PATH, PATTERNS, FEATURES);
 
-    // Bring in features from CSV file 
-    std::string blob_url = "../data/";
-    std::ifstream feat_csv(blob_url + DATA_PATH + "/blobs.csv", std::ios_base::in);
-    std::string line;
-    int row = 0;
-    int col = -1;
-    float val;
-
-    if(feat_csv.good())
-    {
-        while(std::getline(feat_csv, line))
-        {
-            std::stringstream ss(line);
-            col = -1;
-            while(ss >> val)
-            {
-                if(col != -1)
-                    patterns[row][col] = val;
-                col++;
-            }
-            row ++;
-        }
-    }
-
-    feat_csv.close();
-
-    // Bring in class labels from CSV file
-
-    std::ifstream label_csv(blob_url + DATA_PATH + "/blobs_classes.csv");
-    int label;
-    row = 0;
-    while(label_csv >> row >> label)
-    {
-        // Labels must be 1 or -1;
-        labels[row] = (label == 1) ? 1 : -1; 
-    }
-    
-    HOGSVM svc(0.000001, learningRate, epochs);
+    HOGSVM svc(learningRate, stepDecay, epochs);
     
     // Train the model and measure time
-    long elapsedTime = svc.fit((float*)patterns, FEATURES, labels, PATTERNS, blocks, threadsPerBlock);
+    timing_t time = svc.fit(data, FEATURES, PATTERNS, blocks, threadsPerBlock);
     
-    // Test the model
-    float accuracy = svc.test((float*)patterns, labels);
+    float accuracy = svc.test(data);
     std::cout << "Final Accuracy: " << accuracy * 100 << "%" << std::endl;
     
     // Print final weights
     float *weights = svc.getWeights();
-    std::cout << "Weights: ";
+    std::cout << "Weights: " << std::endl;
     for(int i = 0; i < FEATURES; i++)
     {
-        std::cout << weights[i] << " ";
+        //std::cout << weights[i] << " ";
+        printf("%09.5f ", weights[i]);
     }
     std::cout << std::endl;
 
     std::cout << "Bias: " << svc.getBias() << std::endl;
 
-    std::cout << "Time to train: " << elapsedTime << " ns" << std::endl;
+    std::cout << "Kernel Time: " << time.kernelTime << " ns" << std::endl;
+    std::cout << "Total Time: " << time.kernelTime + time.mallocTime << " ns" << std::endl;
 
     if (batchMode)
-        std::cerr << accuracy << "," <<  elapsedTime << std::endl;
+        std::cerr << accuracy << "," <<  time.kernelTime << "," << time.mallocTime << "," << time.kernelTime + time.mallocTime << std::endl;
     
-    
+
     return 0;
 }
 
