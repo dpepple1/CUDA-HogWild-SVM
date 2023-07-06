@@ -6,7 +6,7 @@ first_ns=0
 
 if [ $# -ge 2 ]; then
 
-    echo "Blocks,TPB,Kernel Time, Malloc Time,Total Time,Total Speedup" >> $2;
+    echo "Blocks,TPB,Accuracy,Kernel Time, Malloc Time,Total Time,Kernel Speedup" >> $2;
     while [ $b -lt 33 ]
     do
         data=$($1 -t $t -b $b -m 2>&1 > /dev/null);
