@@ -79,7 +79,7 @@ To test using these datsets, you must use either the sparse or managed executabl
 
 ## Other Notes:
 ### Timeout
-When tested on the Nvidia Jetson TX1, the unified sparse dataset was noted as havinga much longer kernel runtime. On Linux, CUDA kernel launches are limited to 5 seconds to prevent the GUI interface of teh device from hanging. To accurately test the application this timeout protection needs to be disabled. Nvidia reccomends against doing this however. Here is how to disable the timeout:
+When tested on the Nvidia Jetson TX1, the unified sparse dataset was noted as having a much longer kernel runtime. On Linux, CUDA kernel launches are limited to 5 seconds to prevent the GUI interface of the device from hanging. To accurately test the application this timeout protection needs to be disabled. Nvidia reccomends against doing this however. Here is how to disable the timeout:
 ```
 sudo -s 
 echo N > /sys/kernel/debug/gpu.0/timeouts_enabled
