@@ -6,16 +6,16 @@
 #include <sstream>
 
 // RCV1
-// #define FEATURES 47236
-// #define PATTERNS 20242 //TRAIN
+#define FEATURES 47236
+#define PATTERNS 20242 //TRAIN
 // #define PATTERNS 677399 //TEST
-// #define DATA_PATH "../data/rcv1/rcv1_train_labeled.binary" // TRAIN
+#define DATA_PATH "../data/rcv1/rcv1_train_labeled.binary" // TRAIN
 // #define DATA_PATH "../data/rcv1/rcv1_test_labeled.binary" // TEST
 
 // WEBSPAM
-#define FEATURES 254
-#define PATTERNS 350000
-#define DATA_PATH "../data/webspam/webspam_labeled.svm"
+// #define FEATURES 254
+// #define PATTERNS 350000
+// #define DATA_PATH "../data/webspam/webspam_labeled.svm"
 
 int main(int argc, char *argv[])
 {  
@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
     // Print final weights
     float *weights = svc.getWeights();
     std::cout << "Weights: ";
-    for(int i = 0; i < FEATURES; i++)
+    for(int i = 0; i < 10; i++)
     {
         //std::cout << weights[i] << " ";
         printf("%03.5f ", weights[i]);

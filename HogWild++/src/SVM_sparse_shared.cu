@@ -310,9 +310,8 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
                 sendToken = -1;
             }
             // Check token and perform synchronization step if necessary
-            if((*token) == blockIdx.x and threadIdx.x == 0) // ONLY FIRST THREAD **CHECK LATER**
+            if((*token) == blockIdx.x) 
             {
-
                 // Make sure you dont update out of bounds!
                 float *nextLocalWeights = NULL;
                 if(blockIdx.x + 1 >= blocks)
@@ -321,25 +320,29 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
                     nextLocalWeights = blockLocalWeights + features;
 
                 // Handling one component at a time in the attempt to be more efficient
-                for(int dim = 0; dim < features; dim++)
+                for(uint dim = i; dim < features / blockDim.x; dim++)
                 {
-                    float weightDifference = blockLocalWeights[dim] - snapshotWeights[dim];
+                    int idim = i * (features / blockDim.x) + dim;
+                    float weightDifference = blockLocalWeights[idim] - snapshotWeights[idim];
                     // Refer to HogWild++ synchronization update formula
-                    blockSnapshotWeights[dim] = lambda * nextLocalWeights[dim] + (1 - lambda) * blockSnapshotWeights[dim] + beta * pow(stepDecay, epoch*iter) * weightDifference;
+                    blockSnapshotWeights[idim] = lambda * nextLocalWeights[idim] + (1 - lambda) * blockSnapshotWeights[idim] + beta * pow(stepDecay, epoch*iter) * weightDifference;
                     // Update next active weights
-                    atomicAdd(nextLocalWeights + dim, beta * pow(stepDecay, epoch *iter) * weightDifference);
-                    blockLocalWeights[dim] = blockSnapshotWeights[dim];
+                    atomicAdd(nextLocalWeights + idim, beta * pow(stepDecay, epoch *iter) * weightDifference);
+                    blockLocalWeights[idim] = blockSnapshotWeights[idim];
                 }
 
-                // Update Bias (Inferred from weights calculation)
-                float *nextLocalBias = blockLocalBias + 1;
-                float biasDifference = *blockLocalBias - *snapshotBias;
-                *blockSnapshotBias = lambda * (*nextLocalBias) + (1-lambda) * (*blockSnapshotBias) + beta * pow(stepDecay, epoch*iter) * biasDifference;
-                atomicAdd(nextLocalBias, beta * pow(stepDecay, epoch*iter) * biasDifference);
-                *blockLocalBias = *blockSnapshotBias;
+                if(threadIdx.x == 0)
+                {
+                    // Update Bias (Inferred from weights calculation)
+                    float *nextLocalBias = blockLocalBias + 1;
+                    float biasDifference = *blockLocalBias - *snapshotBias;
+                    *blockSnapshotBias = lambda * (*nextLocalBias) + (1-lambda) * (*blockSnapshotBias) + beta * pow(stepDecay, epoch*iter) * biasDifference;
+                    atomicAdd(nextLocalBias, beta * pow(stepDecay, epoch*iter) * biasDifference);
+                    *blockLocalBias = *blockSnapshotBias;
 
-                sendToken = (iter + tau) % pairsPerThread;
-                *token = -1;
+                    sendToken = (iter + tau) % pairsPerThread;
+                    *token = -1;
+                }
             }
         }
     }
