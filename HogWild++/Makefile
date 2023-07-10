@@ -6,12 +6,14 @@ OBJ := obj
 SRC := src
 BIN := bin
 
-all: sparse shared
+all: sparse multi shared
 
 sparse: $(BIN)/sparse
+multi: $(BIN)/multi
 shared: $(BIN)/shared
 
-# Sparse Shared SVM
+
+# Sparse SVM
 $(BIN)/sparse: $(OBJ)/main_sparse.o $(OBJ)/sparse_data.o $(OBJ)/SVM_sparse.o $(OBJ)/newton_raphson.o
 	$(NVCC) $^ -o $@
 	
@@ -26,11 +28,19 @@ $(OBJ)/sparse_data.o: $(SRC)/sparse_data.cu $(INC)/sparse_data.cuh
 
 
 # Sparse SVM with multi-thread update
+$(BIN)/multi: $(OBJ)/main_sparse.o $(OBJ)/sparse_data.o $(OBJ)/SVM_sparse_multi.o $(OBJ)/newton_raphson.o
+	$(NVCC) $^ -o $@
+
+$(OBJ)/SVM_sparse_multi.o: $(SRC)/SVM_sparse_multi.cu $(INC)/SVM_sparse.cuh 
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+#Sparse SVM with shared memory
 $(BIN)/shared: $(OBJ)/main_sparse.o $(OBJ)/sparse_data.o $(OBJ)/SVM_sparse_shared.o $(OBJ)/newton_raphson.o
 	$(NVCC) $^ -o $@
 
 $(OBJ)/SVM_sparse_shared.o: $(SRC)/SVM_sparse_shared.cu $(INC)/SVM_sparse.cuh 
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+	
 
 # Resources
 $(OBJ)/newton_raphson.o: $(SRC)/newton_raphson.cpp $(INC)/newton_raphson.hpp
