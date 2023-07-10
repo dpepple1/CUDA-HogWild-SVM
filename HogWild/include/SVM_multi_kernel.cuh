@@ -56,12 +56,16 @@ class HOGSVM
 
 CUDA_GLO void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_data,
                             uint features, uint numPairs, uint epochs, float *d_weights,
-                            float *bias, float learningRate, int subsetOffset);
+                            float *bias, float learningRate, int subsetOffset, int *stop);
 CUDA_HOS CUDA_DEV int predict(float *d_weights, float bias, float *d_pattern, uint features );       
 CUDA_DEV float setGradient(float *wGrad, int trueLabel, int decision, float *row, uint features);
 CUDA_DEV float setGradientSIMT(float *wGrad, int trueLabel, int decision, float *row, uint features);
 CUDA_DEV void updateSparseModel(float *d_weights, float *bias, float *wGrad, float bGrad, float learningRate, int *colIdxs, int sparsity);
 CUDA_HOS CUDA_DEV float testAccuracy(CSR_Data data, uint features, 
                             float *weights, float bias, uint numPairs);
+CUDA_GLO void alternateKernel(float *dummy, int *stop);
 
 #endif
+
+10405909333
+10438948612

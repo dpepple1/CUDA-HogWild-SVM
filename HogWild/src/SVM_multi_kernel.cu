@@ -105,18 +105,29 @@ __host__ long HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int block
     cudaStreamCreate(&stream1);
     cudaStreamCreate(&stream2);
 
+    // Alternate Kernel Memory
+    float *dummy = NULL;
+    cudaMalloc(&dummy, sizeof(float));
+    cudaMemset(dummy, 0, sizeof(float));
+    
+    int *stop = NULL;
+    cudaMalloc(&stop, sizeof(int));
+    cudaMemset(stop, 0, sizeof(int));
+
     // Spawn threads to begin SGD Process
     auto begin = std::chrono::steady_clock::now();
     SGDKernel<<<blocks, threadsPerBlock, 0, stream1>>>(blocks * threadsPerBlock, states,
                         d_data, features, numPairs / 2, epochsPerCore, d_weights,
-                        d_bias, learningRate, 0);
+                        d_bias, learningRate, 0, stop);
 
     SGDKernel<<<blocks, threadsPerBlock, 0, stream2>>>(blocks * threadsPerBlock, states,
                         d_data, features, numPairs / 2, epochsPerCore, d_weights,
-                        d_bias, learningRate, numPairs / 2);
+                        d_bias, learningRate, numPairs / 2, stop);
+    // alternateKernel<<<1,1,0,stream2>>>(dummy, stop);
 
     // Wait for threads to finish and collect weights
     cudaDeviceSynchronize();
+    //cudaStreamSynchronize(stream1);
     auto end = std::chrono::steady_clock::now();
 
     cudaMemcpy(weights, d_weights, features * sizeof(float), cudaMemcpyDeviceToHost);
@@ -222,7 +233,7 @@ __device__ void updateSparseModel(float *d_weights, float *bias, float *wGrad, f
 // CUDA Kernel that performs HOGWILD! SGD
 __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_data,
                             uint features, uint numPairs, uint epochs, float *d_weights,
-                            float *d_bias, float learningRate, int subsetOffset) {   
+                            float *d_bias, float learningRate, int subsetOffset, int *stop) {   
     // Compute Thread Index
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -273,6 +284,7 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             delete[] wGrad;
         }
     }
+    *stop += 1;
 }
 
 __host__ __device__ float testAccuracy(CSR_Data data, uint features, float *weights, float bias, uint numPairs) 
@@ -307,9 +319,12 @@ __host__ __device__ float testAccuracy(CSR_Data data, uint features, float *weig
     return (float)correct / (float)total;
 }
 
-
-// TODO:
-// Figure out how the bias gradient needs to be applied
-// Figure out how the multithreading interacts with the bias update. 
-
-// Before testing speedup, do something about the print statements in thread 1
+__global__ void alternateKernel(float *dummy, int *stop)
+{
+    printf("Start Alternate!\n");
+    while(*stop < 127)
+    {
+        *dummy += 1;
+    }
+    printf("Finished Alternate Kernel!\n");
+}

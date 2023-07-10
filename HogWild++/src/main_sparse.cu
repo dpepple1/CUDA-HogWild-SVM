@@ -6,10 +6,10 @@
 #include <sstream>
 
 // RCV1
-// #define FEATURES 47236
-// #define PATTERNS 20242 //TRAIN
+//#define FEATURES 47236
+//#define PATTERNS 20242 //TRAIN
 // #define PATTERNS 677399 //TEST
-// #define DATA_PATH "../data/rcv1/rcv1_train_labeled.binary" // TRAIN
+//#define DATA_PATH "../data/rcv1/rcv1_train_labeled.binary" // TRAIN
 // #define DATA_PATH "../data/rcv1/rcv1_test_labeled.binary" // TEST
 
 // WEBSPAM
@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
     HOGSVM svc(learningRate, stepDecay, epochs);
     
     // Train the model and measure time
-    timing_t time = svc.fit(data, FEATURES, PATTERNS, blocks, threadsPerBlock);
+    timing_t time = svc.fit(data, FEATURES, PATTERNS, blocks, threadsPerBlock, 64);
     
     float accuracy = svc.test(data);
     std::cout << "Final Accuracy: " << accuracy * 100 << "%" << std::endl;
@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
     for(int i = 0; i < FEATURES; i++)
     {
         //std::cout << weights[i] << " ";
-        printf("%09.5f ", weights[i]);
+        // printf("%09.5f ", weights[i]);
     }
     std::cout << std::endl;
 

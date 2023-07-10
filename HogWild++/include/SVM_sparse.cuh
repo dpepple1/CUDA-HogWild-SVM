@@ -43,7 +43,7 @@ class HOGSVM
 
         // Public methods
         CUDA_HOS timing_t fit(CSR_Data data, uint features, uint numPairs,
-                            int blocks, int threadsPerBlock);
+                            int blocks, int threadsPerBlock, int tau);
         CUDA_HOS float test(CSR_Data data);
         CUDA_HOS float* getWeights();
         CUDA_HOS float getBias();
@@ -68,7 +68,7 @@ class HOGSVM
 CUDA_GLO void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_data,
                             float *activeWeights, float *snapshotWeights, float *activeBias, float *snapshotBias,
                             uint features, uint numPairs, uint epochs, float learningRate,
-                            float stepDecay, int *token, float beta, float lambda, int blocks);
+                            float stepDecay, int *token, float beta, float lambda, int blocks, int tau);
 CUDA_HOS CUDA_DEV int predict(float *d_weights, float bias, float *d_pattern, uint features );       
 CUDA_DEV float setGradient(float *wGrad, int trueLabel, int decision, float *row, uint features);
 CUDA_DEV float setGradientSIMT(float *wGrad, int trueLabel, int decision, float *row, uint features);
