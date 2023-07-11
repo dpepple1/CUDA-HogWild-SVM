@@ -29,6 +29,8 @@ Both the HogWild and HogWild++ folders contain variations of a SGD SVM that are 
 ### HogWild++
 #### Implementations
 - **Sparse:** Reads in data represented in a sparse format (col:value). Uses cudaMallocs and cudaMemcpys to transfer betweeen device and host memory.
+- **Multi:** Reads in data represented in a sparse format (col:value). Utilizes all threads in a block to perform synchronization instead of just the first thread.
+- **Shared:** Reads in data represented in a sparse format (col: value). Operates on data stored in shared (scratchpad) memory. Block being updated moves its data from shared memory into global memory to allow synchronization, and then moves it back to shared memory. 
 
 #### Components
 - **All components from HogWild!**

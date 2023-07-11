@@ -245,16 +245,9 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
     // Compute Thread Index
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     
-    extern __shared__ float s_blockLocalWeights[];
-    extern __shared__ float s_blockSnapshotWeights[];
-
-    __shared__ float s_blockLocalBias;
-    __shared__ float s_blockSnapshotBias;
-
-
     // Get block specific pointer to seperate weights
     float *blockLocalWeights = activeWeights + (blockIdx.x * features);
-    // float *blockSnapshotWeights = snapshotWeights + (blockIdx.x * features);
+    float *blockSnapshotWeights = snapshotWeights + (blockIdx.x * features);
 
     float *blockLocalBias = activeBias + blockIdx.x;
     float *blockSnapshotBias = snapshotBias + blockIdx.x;
@@ -296,14 +289,14 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             for(uint idx = 0; idx < sparsity; idx++)
             {
                 // For each non-sparse value copy the weight from the matching column
-                copyWeights[idx] = s_blockLocalWeights[d_data->colIdx[colStart + idx]];
+                copyWeights[idx] = blockLocalWeights[d_data->colIdx[colStart + idx]];
             }
             
             
             //Make a prediction and set gradient
-            int decision = predict(copyWeights, s_blockLocalBias, d_data->values + valuesStart, sparsity); //Double check this 
+            int decision = predict(copyWeights, *blockLocalBias, d_data->values + valuesStart, sparsity); //Double check this 
             float bGrad = setGradientSIMT(wGrad, trueLabel, decision, d_data->values + valuesStart, sparsity);
-            updateSparseModel(s_blockLocalWeights, &s_blockLocalBias, wGrad, bGrad, learningRate, d_data->colIdx + colStart, sparsity);
+            updateSparseModel(blockLocalWeights, blockLocalBias, wGrad, bGrad, learningRate, d_data->colIdx + colStart, sparsity);
 
             delete[] copyWeights;
             delete[] wGrad;
@@ -316,22 +309,9 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
                     *token = 0;
                 sendToken = -1;
             }
-
-            // Move shared weights over to global memory
-            if((*token) + 1 == blockIdx.x and threadIdx.x == 0)
-            {
-                memcpy(blockLocalWeights, s_blockLocalWeights, features * sizeof(float));
-                // memcpy(blockSnapshotWeights, s_blockSnapshotWeights, features * sizeof(float));
-                *blockLocalBias = s_blockLocalBias;
-                *blockSnapshotBias = s_blockSnapshotBias;
-            }
-
-            __syncthreads();
-
             // Check token and perform synchronization step if necessary
             if((*token) == blockIdx.x) 
             {
-                printf("Syncing\n");
                 // Make sure you dont update out of bounds!
                 float *nextLocalWeights = NULL;
                 if(blockIdx.x + 1 >= blocks)
@@ -343,37 +323,26 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
                 for(uint dim = i; dim < features / blockDim.x; dim++)
                 {
                     int idim = i * (features / blockDim.x) + dim;
-                    float weightDifference = s_blockLocalWeights[idim] - s_blockSnapshotWeights[idim];
+                    float weightDifference = blockLocalWeights[idim] - snapshotWeights[idim];
                     // Refer to HogWild++ synchronization update formula
-                    s_blockSnapshotWeights[idim] = lambda * nextLocalWeights[idim] + (1 - lambda) * s_blockSnapshotWeights[idim] + beta * pow(stepDecay, epoch*iter) * weightDifference;
+                    blockSnapshotWeights[idim] = lambda * nextLocalWeights[idim] + (1 - lambda) * blockSnapshotWeights[idim] + beta * pow(stepDecay, epoch*iter) * weightDifference;
                     // Update next active weights
                     atomicAdd(nextLocalWeights + idim, beta * pow(stepDecay, epoch *iter) * weightDifference);
-                    s_blockLocalWeights[idim] = s_blockSnapshotWeights[idim];
+                    blockLocalWeights[idim] = blockSnapshotWeights[idim];
                 }
 
                 if(threadIdx.x == 0)
                 {
                     // Update Bias (Inferred from weights calculation)
                     float *nextLocalBias = blockLocalBias + 1;
-                    float biasDifference = s_blockLocalBias - s_blockSnapshotBias;
-                    *blockSnapshotBias = lambda * (*nextLocalBias) + (1-lambda) * (s_blockSnapshotBias) + beta * pow(stepDecay, epoch*iter) * biasDifference;
+                    float biasDifference = *blockLocalBias - *snapshotBias;
+                    *blockSnapshotBias = lambda * (*nextLocalBias) + (1-lambda) * (*blockSnapshotBias) + beta * pow(stepDecay, epoch*iter) * biasDifference;
                     atomicAdd(nextLocalBias, beta * pow(stepDecay, epoch*iter) * biasDifference);
-                    s_blockLocalBias = s_blockSnapshotBias;
+                    *blockLocalBias = *blockSnapshotBias;
 
                     sendToken = (iter + tau) % pairsPerThread;
                     *token = -1;
                 }
-            }
-
-            __syncthreads();
-
-            // Move shared weights back to shared memory
-            if((*token) + 1 == blockIdx.x and threadIdx.x == 0)
-            {
-                memcpy(s_blockLocalWeights, blockLocalWeights, features * sizeof(float));
-                // memcpy(s_blockSnapshotWeights, blockSnapshotWeights, features * sizeof(float));
-                s_blockLocalBias = *blockLocalBias;
-                s_blockSnapshotBias = *blockSnapshotBias;
             }
         }
     }
