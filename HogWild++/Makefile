@@ -1,5 +1,13 @@
+PLATFORM = $(shell uname -m)
+
 NVCC := nvcc
-NVCC_FLAGS := -g -G -Xcompiler -Wall -gencode arch=compute_75,code=sm_75
+
+ifeq ($(PLATFORM), x86_64) # compiling on WSL
+	NVCC_FLAGS := -g -G -Xcompiler -Wall -gencode arch=compute_75,code=sm_75
+	
+else
+	NVCC_FLAGS := -g -G -Xcompiler -Wall -gencode arch=compute_75,code=sm_75
+endif
 
 INC := include
 OBJ := obj
