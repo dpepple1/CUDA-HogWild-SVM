@@ -61,7 +61,7 @@ $(OBJ)/SVM_sparse_hetero.o: $(SRC)/SVM_sparse_hetero.cu $(INC)/SVM_sparse_hetero
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 # Sparse SVM with shared memory and unified memory (JETSON)
-$(BIN)/jshared: $(OBJ)/main_jshared.o $(OBJ)/sparse_data_unified.o $(OBJ)/SVM_jshared.o $(OBJ)/newton_raphson.o
+$(BIN)/jshared: $(OBJ)/main_jshared.o $(OBJ)/sparse_data_managed.o $(OBJ)/SVM_jshared.o $(OBJ)/newton_raphson.o
 	$(NVCC) $(LINK_FLAGS) $^ -o $@
 	
 $(OBJ)/main_jshared.o: $(SRC)/main_jshared.cu
@@ -70,8 +70,12 @@ $(OBJ)/main_jshared.o: $(SRC)/main_jshared.cu
 $(OBJ)/SVM_jshared.o: $(SRC)/SVM_jshared.cu $(INC)/SVM_jsparse.cuh 
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
-$(OBJ)/sparse_data_unified.o: $(SRC)/sparse_data_unified.cu $(INC)/sparse_data_unified.cuh
+#$(OBJ)/sparse_data_unified.o: $(SRC)/sparse_data_unified.cu $(INC)/sparse_data_unified.cuh
+#	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+$(OBJ)/sparse_data_managed.o: $(SRC)/sparse_data_managed.cu $(INC)/sparse_data_managed.cuh
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
 
 
 # Resources
