@@ -5,12 +5,16 @@
 #include <vector>
 #include <sstream>
 
-#define FEATURES 47236
-//#define PATTERNS 677399
-#define PATTERNS 20242
+// #define FEATURES 47236
+// #define PATTERNS 677399
+// #define PATTERNS 20242
 
+// #define DATA_PATH "../data/rcv1/rcv1_train_labeled.binary
 
-#define DATA_PATH "../data/rcv1/rcv1_train_labeled.binary"
+// WEBSPAM
+#define FEATURES 254
+#define	PATTERNS 350000
+#define DATA_PATH "../data/webspam/webspam_labeled.svm"
 
 int main(int argc, char *argv[])
 {  
