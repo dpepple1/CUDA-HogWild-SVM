@@ -331,7 +331,6 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             // Check token and perform synchronization step if necessary
             if((*token) == blockIdx.x) 
             {
-                printf("Syncing\n");
                 // Make sure you dont update out of bounds!
                 float *nextLocalWeights = NULL;
                 if(blockIdx.x + 1 >= blocks)
