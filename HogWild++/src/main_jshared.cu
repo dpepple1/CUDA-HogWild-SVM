@@ -1,5 +1,5 @@
 #include "../include/SVM_sparse.cuh"
-#include "../include/sparse_data_unified.cuh"
+#include "../include/sparse_data_managed.cuh"
 #include <fstream>
 #include <string>
 #include <vector>
@@ -66,16 +66,11 @@ int main(int argc, char *argv[])
     }
 
     // Data
-    CSR_Data data = buildSparseData(DATA_PATH, PATTERNS, FEATURES);
+    CSR_Data *data = buildSparseData(DATA_PATH, PATTERNS, FEATURES);
     HOGSVM svc(learningRate, stepDecay, epochs);
     
-    // Get GPU Pointers
-    CSR_Data *d_data = NULL;
-    CSR_Data *h_d_data = CSRToGPU(data);
-    cudaHostGetDevicePointer((void**)&d_data, h_d_data, 0);
-
     // Train the model and measure time
-    timing_t time = svc.fit(d_data, FEATURES, PATTERNS, blocks, threadsPerBlock, 64);
+    timing_t time = svc.fit(data, FEATURES, PATTERNS, blocks, threadsPerBlock, 64);
     
     float accuracy = svc.test(data);
     std::cout << "Final Accuracy: " << accuracy * 100 << "%" << std::endl;

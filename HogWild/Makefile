@@ -1,3 +1,5 @@
+PLATFORM = $(shell uname -m)
+
 NVCC := nvcc
 ifeq ($(PLATFORM), x86_64) # compiling on WSL
 	NVCC_FLAGS := -g -G -Xcompiler -Wall -gencode arch=compute_75,code=sm_75
