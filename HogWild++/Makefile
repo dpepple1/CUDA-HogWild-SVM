@@ -1,3 +1,4 @@
+PLATFORM = $(shell uname -m)
 NVCC := nvcc
 
 ifeq ($(PLATFORM), x86_64) # compiling on WSL
@@ -19,7 +20,7 @@ sparse: $(BIN)/sparse
 multi: $(BIN)/multi
 shared: $(BIN)/shared
 hetero: $(BIN)/hetero
-jshared: $(BIN)/shared
+jshared: $(BIN)/jshared
 
 
 # Sparse SVM
@@ -67,7 +68,7 @@ $(BIN)/jshared: $(OBJ)/main_jshared.o $(OBJ)/sparse_data_managed.o $(OBJ)/SVM_js
 $(OBJ)/main_jshared.o: $(SRC)/main_jshared.cu
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
-$(OBJ)/SVM_jshared.o: $(SRC)/SVM_jshared.cu $(INC)/SVM_jsparse.cuh 
+$(OBJ)/SVM_jshared.o: $(SRC)/SVM_jshared.cu $(INC)/SVM_jshared.cuh 
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 #$(OBJ)/sparse_data_unified.o: $(SRC)/sparse_data_unified.cu $(INC)/sparse_data_unified.cuh

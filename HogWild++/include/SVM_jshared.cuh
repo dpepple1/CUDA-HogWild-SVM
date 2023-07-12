@@ -20,7 +20,7 @@ by Derek Pepple
 #include <iostream>
 #include <curand_kernel.h>
 #include <chrono>
-#include "sparse_data.cuh"
+#include "sparse_data_managed.cuh"
 #include "../include/newton_raphson.hpp"
 
 
@@ -42,7 +42,7 @@ class HOGSVM
         ~HOGSVM();
 
         // Public methods
-        CUDA_HOS timing_t fit(CSR_Data data, uint features, uint numPairs,
+        CUDA_HOS timing_t fit(CSR_Data *data, uint features, uint numPairs,
                             int blocks, int threadsPerBlock, int tau);
         CUDA_HOS float test(CSR_Data data);
         CUDA_HOS float* getWeights();

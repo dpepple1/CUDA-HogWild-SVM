@@ -1,4 +1,4 @@
-#include "../include/SVM_sparse.cuh"
+#include "../include/SVM_jshared.cuh"
 #include "../include/sparse_data_managed.cuh"
 #include <fstream>
 #include <string>
@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
     // Train the model and measure time
     timing_t time = svc.fit(data, FEATURES, PATTERNS, blocks, threadsPerBlock, 64);
     
-    float accuracy = svc.test(data);
+    float accuracy = svc.test(*data);
     std::cout << "Final Accuracy: " << accuracy * 100 << "%" << std::endl;
     
     // Print final weights
@@ -80,8 +80,8 @@ int main(int argc, char *argv[])
     std::cout << "Weights: " << std::endl;
     for(int i = 0; i < FEATURES; i++)
     {
-        //std::cout << weights[i] << " ";
-        // printf("%09.5f ", weights[i]);
+        std::cout << weights[i] << " ";
+        printf("%09.5f ", weights[i]);
     }
     std::cout << std::endl;
 
