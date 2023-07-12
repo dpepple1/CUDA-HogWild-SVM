@@ -117,12 +117,11 @@ __host__ CSR_Data *CSRToGPU(CSR_Data data)
 	CSR_Data *h_d_data = NULL;
 	cudaHostAlloc(&h_d_data, sizeof(CSR_Data), cudaHostAllocMapped);
 
-    printf("Test?\n");
-	h_d_data->sparsity = d_sparsity;
-	h_d_data->labels = d_labels;
-	h_d_data->rowIdx = d_rowIdx;
-	h_d_data->colIdx = d_colIdx;
-	h_d_data->values = d_values;
+	h_d_data->sparsity = data.sparsity;
+	h_d_data->labels = data.labels;
+	h_d_data->rowIdx = data.rowIdx;
+	h_d_data->colIdx = data.colIdx;
+	h_d_data->values = data.values;
 	h_d_data->numPairs = data.numPairs;
 	h_d_data->numObservations = data.numObservations;
     

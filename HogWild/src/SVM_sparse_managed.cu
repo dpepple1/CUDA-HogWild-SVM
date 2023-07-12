@@ -74,7 +74,7 @@ __host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
 
 __host__ long HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int blocks, int threadsPerBlock)
 {
-    auto begin = std::chrono::steady_clock::now();
+    // auto begin = std::chrono::steady_clock::now();
     
     this->features = features;
     this->numPairs = numPairs;
@@ -93,6 +93,7 @@ __host__ long HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int bloc
     printf("Starting Threads\n");
     // Spawn threads to begin SGD Process
 
+    auto begin = std::chrono::steady_clock::now();
     SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, states,
                         data, features, numPairs, epochsPerCore, weights,
                         bias, learningRate);
