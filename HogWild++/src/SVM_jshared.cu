@@ -124,8 +124,8 @@ __host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int 
 
     //cudaMemcpy(weights, activeWeights, sizeof(float) * features, cudaMemcpyDeviceToHost);
     //cudaMemcpy(&bias, activeBias, sizeof(float), cudaMemcpyDeviceToHost);
-    memcpy(weights, activeWeights, sizeof(float) * features);
-    memcpy(&bias, activeBias, sizeof(float));
+    cudaMemcpy(weights, activeWeights, sizeof(float) * features, cudaMemcpyHostToHost);
+    cudaMemcpy(&bias, activeBias, sizeof(float), cudaMemcpyHostToHost);
 
     cudaFree(states);
     cudaFree(activeWeights);
@@ -330,7 +330,6 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             // Check token and perform synchronization step if necessary
             if((*token) == blockIdx.x) 
             {
-                printf("Syncing!\n");
                 // Make sure you dont update out of bounds!
                 float *nextLocalWeights = NULL;
                 if(blockIdx.x + 1 >= blocks)
