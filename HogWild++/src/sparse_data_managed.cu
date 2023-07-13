@@ -1,4 +1,4 @@
-#include "../include/sparse_data_unified.cuh"
+#include "../include/sparse_data_managed.cuh"
 
 /*
 A version of sparse_data.cu that creates GPU managed memory
@@ -7,7 +7,7 @@ A version of sparse_data.cu that creates GPU managed memory
 
 // Returns a host vector so that it can be converted to a device_vector
 // when it is convienent to do so.
-__host__ CSR_Data buildSparseData(std::string path, uint num_patterns, uint num_features)
+__host__ CSR_Data *buildSparseData(std::string path, uint num_patterns, uint num_features)
 {
     // Indeterminate number of values so these are vectors
     std::vector<int> v_colIdx;
@@ -18,9 +18,9 @@ __host__ CSR_Data buildSparseData(std::string path, uint num_patterns, uint num_
     int *labels;
     int *sparsity;
 
-    cudaHostAlloc(&rowIdx, num_patterns * sizeof(long), cudaHostAllocMapped);
-    cudaHostAlloc(&labels, num_patterns * sizeof(int), cudaHostAllocMapped);
-    cudaHostAlloc(&sparsity, num_patterns * sizeof(int), cudaHostAllocMapped);
+    cudaMallocManaged(&rowIdx, num_patterns * sizeof(long));
+    cudaMallocManaged(&labels, num_patterns * sizeof(int));
+    cudaMallocManaged(&sparsity, num_patterns * sizeof(int));
 
     // Declare variables for file reading
     std::ifstream csv(path, std::ios_base::in);
@@ -58,7 +58,7 @@ __host__ CSR_Data buildSparseData(std::string path, uint num_patterns, uint num_
                     std::istringstream in(pair);
                     // Get Index
                     getline(in, store, ':');
-                    int idx = stoi(store) -1;
+                    int idx = stoi(store);
                     // Get Value
                     getline(in, store);
                     float val = stof(store);
@@ -82,66 +82,82 @@ __host__ CSR_Data buildSparseData(std::string path, uint num_patterns, uint num_
 
     // Build CSR_Data Struct
     int *colIdx;
-    cudaHostAlloc(&colIdx, v_colIdx.size() * sizeof(int), cudaHostAllocMapped);
+    cudaMallocManaged(&colIdx, v_colIdx.size() * sizeof(int));
     std::copy(v_colIdx.begin(), v_colIdx.end(), colIdx);
 
     float *values;
-    cudaHostAlloc(&values, v_values.size() * sizeof(float), cudaHostAllocMapped);
+    cudaMallocManaged(&values, v_values.size() * sizeof(float));
     std::copy(v_values.begin(), v_values.end(), values);
 
-    CSR_Data data = {sparsity, labels, rowIdx, colIdx, values, num_patterns, v_values.size()};
+    CSR_Data *data;
+    cudaMallocManaged(&data, sizeof(CSR_Data));
+    data->sparsity = sparsity;
+    data->labels = labels;
+    data->rowIdx = rowIdx;
+    data->colIdx = colIdx;
+    data->values = values;
+    data->numPairs = num_patterns;
+    data->numObservations = v_values.size();
+
     return data;
 }
 
-// Gets the associated GPU pointers for the unified memory
+// Allocates the dataset on the GPU
 __host__ CSR_Data *CSRToGPU(CSR_Data data)
 {
     // Copy Each of the arrays first
     int *d_sparsity;
-    cudaHostGetDevicePointer((void**)&d_sparsity, data.sparsity, 0);
+    cudaMalloc(&d_sparsity, sizeof(int) * data.numPairs);
+    cudaMemcpy(d_sparsity, data.sparsity, data.numPairs * sizeof(int), cudaMemcpyHostToDevice);
 
     int *d_labels;
-	cudaHostGetDevicePointer((void**)&d_labels, data.labels, 0);    
+    cudaMalloc(&d_labels, sizeof(int) * data.numPairs);
+    cudaMemcpy(d_labels, data.labels, data.numPairs * sizeof(int), cudaMemcpyHostToDevice);
 
     long *d_rowIdx;
-	cudaHostGetDevicePointer((void**)&d_rowIdx, data.rowIdx, 0);
+    cudaMalloc(&d_rowIdx, sizeof(long) * data.numPairs);
+    cudaMemcpy(d_rowIdx, data.rowIdx, data.numPairs * sizeof(long), cudaMemcpyHostToDevice);
 
     int *d_colIdx;
-	cudaHostGetDevicePointer((void**)&d_colIdx, data.colIdx, 0);
+    cudaMalloc(&d_colIdx, sizeof(int) * data.numObservations);
+    cudaMemcpy(d_colIdx, data.colIdx, data.numObservations * sizeof(int), cudaMemcpyHostToDevice);
 
     float *d_values;
-	cudaHostGetDevicePointer((void**)&d_values, data.values, 0);
+    cudaMalloc(&d_values, sizeof(float) * data.numObservations);
+    cudaMemcpy(d_values, data.values, data.numObservations * sizeof(float), cudaMemcpyHostToDevice);
 
     // Build a new struct with new pointers and copy it to GPU
-
-	CSR_Data *h_d_data = NULL;
-	cudaHostAlloc(&h_d_data, sizeof(CSR_Data), cudaHostAllocMapped);
-
-    printf("Test?\n");
-	h_d_data->sparsity = d_sparsity;
-	h_d_data->labels = d_labels;
-	h_d_data->rowIdx = d_rowIdx;
-	h_d_data->colIdx = d_colIdx;
-	h_d_data->values = d_values;
-	h_d_data->numPairs = data.numPairs;
-	h_d_data->numObservations = data.numObservations;
+    CSR_Data temp = {d_sparsity, d_labels, d_rowIdx, d_colIdx, d_values, data.numPairs, data.numObservations};
     
-    return h_d_data;
+    CSR_Data *d_data;
+    cudaMalloc(&d_data, sizeof(CSR_Data));
+    cudaMemcpy(d_data, &temp, sizeof(CSR_Data), cudaMemcpyHostToDevice);
+    
+    return d_data;
 }
 
 // Frees memory allocated for CSR Dataset
-__host__ void freeCSRGPU(CSR_Data *h_d_data)
+__host__ void freeCSRGPU(CSR_Data *data)
 {
-	cudaFreeHost(h_d_data);
+    // We cant access member values because the struct in on the GPU
+    CSR_Data temp;
+    cudaMemcpy(&temp, data, sizeof(CSR_Data), cudaMemcpyDeviceToHost);
+    cudaFree(data);
+
+    // After moving the pointers over, we can now free them
+    cudaFree(temp.sparsity);
+    cudaFree(temp.labels);
+    cudaFree(temp.rowIdx);
+    cudaFree(temp.colIdx);
+    cudaFree(temp.values);
 }
 
 // deletes the arrays created with new in buildSparseData()
 __host__ void freeCSRHost(CSR_Data data)
 {
-	cudaFreeHost(data.sparsity);
-	cudaFreeHost(data.labels);
-	cudaFreeHost(data.rowIdx);
-	cudaFreeHost(data.colIdx);
-	cudaFreeHost(data.colIdx);
-	cudaFreeHost(data.values);
+    delete[] data.sparsity;
+    delete[] data.labels;
+    delete[] data.rowIdx;
+    delete[] data.colIdx;
+    delete[] data.values;
 }

@@ -5,7 +5,7 @@ implemented using the HOGWILD++ algorithm for parallelization on GPUs.
 by Derek Pepple
 */
 
-#include "../include/SVM_sparse.cuh"
+#include "../include/SVM_jshared.cuh"
 #include <stdio.h>
 #include <unistd.h>
 
@@ -70,7 +70,7 @@ __host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
     cudaFree(d_labels);
 }
 
-__host__ timing_t HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int blocks, int threadsPerBlock, int tau)
+__host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int blocks, int threadsPerBlock, int tau)
 {
     this->features = features;
     this->numPairs = numPairs;
@@ -87,36 +87,33 @@ __host__ timing_t HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int b
     
     // Set up curand states
     curandState_t* states;
-    cudaMalloc((void**)&states, blocks * threadsPerBlock * sizeof(curandState_t));
-
-    //Allocate GPU training data
-    CSR_Data *d_data = CSRToGPU(data);
+    cudaMallocManaged((void**)&states, blocks * threadsPerBlock * sizeof(curandState_t));
 
     const size_t weightSize = sizeof(float) * features;
     
     // Create a token in global GPU Memory
     int *token = NULL;
-    cudaMalloc(&token, sizeof(int));
-    cudaMemset(token, 0, sizeof(int));
+    cudaMallocManaged(&token, sizeof(int));
+    *token = 0;
 
     // Because shared memory doesnt work, use global memory (THIS IS ALOT OF MEMORY)
     float *activeWeights  = NULL;
-    cudaMalloc(&activeWeights, features * sizeof(float) * blocks);
+    cudaMallocManaged(&activeWeights, features * sizeof(float) * blocks);
     
     float *snapshotWeights = NULL;
-    cudaMalloc(&snapshotWeights, features * sizeof(float) * blocks);
+    cudaMallocManaged(&snapshotWeights, features * sizeof(float) * blocks);
     
     float *activeBias = NULL;
-    cudaMalloc(&activeBias, sizeof(float) * blocks);
+    cudaMallocManaged(&activeBias, sizeof(float) * blocks);
 
     float *snapshotBias = NULL;
-    cudaMalloc(&snapshotBias, sizeof(float) * blocks);
+    cudaMallocManaged(&snapshotBias, sizeof(float) * blocks);
 
 
     printf("Starting Threads\n");
     // Spawn threads to begin SGD Process
     auto kernelStart = std::chrono::steady_clock::now();
-    SGDKernel<<<blocks, threadsPerBlock, weightSize>>>(blocks * threadsPerBlock, states, d_data, 
+    SGDKernel<<<blocks, threadsPerBlock, weightSize>>>(blocks * threadsPerBlock, states, data, 
                         activeWeights, snapshotWeights, activeBias, snapshotBias,
                         features, numPairs, epochsPerCore, learningRate,
                         stepDecay, token, beta, lambda, blocks, tau);
@@ -125,10 +122,12 @@ __host__ timing_t HOGSVM::fit(CSR_Data data, uint features, uint numPairs, int b
     cudaDeviceSynchronize();
     auto end = std::chrono::steady_clock::now();
 
-    cudaMemcpy(weights, activeWeights, sizeof(float) * features, cudaMemcpyDeviceToHost);
-    cudaMemcpy(&bias, activeBias, sizeof(float), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(weights, activeWeights, sizeof(float) * features, cudaMemcpyDeviceToHost);
+    //cudaMemcpy(&bias, activeBias, sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(weights, activeWeights, sizeof(float) * features, cudaMemcpyHostToHost);
+    cudaMemcpy(&bias, activeBias, sizeof(float), cudaMemcpyHostToHost);
+
     cudaFree(states);
-    freeCSRGPU(d_data);
     cudaFree(activeWeights);
     cudaFree(snapshotWeights);
     cudaFree(activeBias);
