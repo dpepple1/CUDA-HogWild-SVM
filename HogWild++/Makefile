@@ -14,13 +14,14 @@ OBJ := obj
 SRC := src
 BIN := bin
 
-all: sparse multi shared hetero jshared
+all: sparse multi shared hetero jshared jhetero
 
 sparse: $(BIN)/sparse
 multi: $(BIN)/multi
 shared: $(BIN)/shared
 hetero: $(BIN)/hetero
 jshared: $(BIN)/jshared
+jhetero: $(BIN)/jhetero
 
 
 # Sparse SVM

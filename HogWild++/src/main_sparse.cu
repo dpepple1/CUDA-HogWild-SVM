@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
     for(int i = 0; i < FEATURES; i++)
     {
         //std::cout << weights[i] << " ";
-        // printf("%09.5f ", weights[i]);
+        printf("%09.5f ", weights[i]);
     }
     std::cout << std::endl;
 
