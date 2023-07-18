@@ -138,7 +138,7 @@ __host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int 
 
 
     // Code inside this loop will run until CPU for duration of the kernel
-    while(cudaEventQuery(finished) != 0)
+    while(cudaEventQuery(finished) == cudaErrorNotReady)
     {
         if(*sync == 1)
         {
@@ -183,9 +183,9 @@ __host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int 
         //otherwise wait until its time to sync
     }
 
-
-
     auto end = std::chrono::steady_clock::now();
+
+    printf("Exit event: %d\n", cudaEventQuery(finished));
 
     cudaMemcpy(weights, activeWeights, sizeof(float) * features, cudaMemcpyHostToHost);
     cudaMemcpy(&bias, activeBias, sizeof(float), cudaMemcpyHostToHost);
