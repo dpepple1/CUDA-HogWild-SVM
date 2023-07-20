@@ -107,16 +107,20 @@ __host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int 
 
     // Because shared memory doesnt work, use global memory (THIS IS ALOT OF MEMORY)
     float *activeWeights  = NULL;
-    cudaHostAlloc(&activeWeights, features * sizeof(float) * blocks, cudaHostAllocMapped);
-    
-    float *snapshotWeights = NULL;
-    cudaHostAlloc(&snapshotWeights, features * sizeof(float) * blocks, cudaHostAllocMapped);
-    
-    float *activeBias = NULL;
-    cudaHostAlloc(&activeBias, sizeof(float) * blocks, cudaHostAllocMapped);
+    cudaHostAlloc(&activeWeights, features * sizeof(float) * blocks, cudaHostAllocDefault);
+    //cudaMallocManaged(&activeWeights, features * sizeof(float) * blocks);
 
+    float *snapshotWeights = NULL;
+    cudaHostAlloc(&snapshotWeights, features * sizeof(float) * blocks, cudaHostAllocDefault);
+    //cudaMallocManaged(&snapshotWeights, features * sizeof(float) * blocks);
+
+    float *activeBias = NULL;
+    cudaHostAlloc(&activeBias, sizeof(float) * blocks, cudaHostAllocDefault);
+    //cudaMallocManaged(&activeBias, sizeof(float) * blocks);
+	
     float *snapshotBias = NULL;
-    cudaHostAlloc(&snapshotBias, sizeof(float) * blocks, cudaHostAllocMapped);
+    cudaHostAlloc(&snapshotBias, sizeof(float) * blocks, cudaHostAllocDefault);
+    //cudaMallocManaged(&snapshotBias, sizeof(float) * blocks);
 
     int *iterBuf = NULL;
     cudaHostAlloc(&iterBuf, sizeof(int), cudaHostAllocMapped);
@@ -140,6 +144,7 @@ __host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int 
     // Code inside this loop will run until CPU for duration of the kernel
     while(cudaEventQuery(finished) == cudaErrorNotReady)
     {
+        
         if(*sync == 1)
         {
             // ------ WEIGHTS ------
@@ -181,6 +186,7 @@ __host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int 
             *sync = 0;
         }
         //otherwise wait until its time to sync
+     
     }
 
     auto end = std::chrono::steady_clock::now();
