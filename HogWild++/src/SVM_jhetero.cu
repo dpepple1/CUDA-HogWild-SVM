@@ -108,7 +108,7 @@ __host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int 
     // Because shared memory doesnt work, use global memory (THIS IS ALOT OF MEMORY)
     float *activeWeights  = NULL;
     cudaHostAlloc(&activeWeights, features * sizeof(float) * blocks, cudaHostAllocDefault);
-    //cudaMallocManaged(&activeWeights, features * sizeof(float) * blocks);
+    //cudaMallocManaged(&activeWeights, features * sizeof(float) * blocks); 
 
     float *snapshotWeights = NULL;
     cudaHostAlloc(&snapshotWeights, features * sizeof(float) * blocks, cudaHostAllocDefault);
