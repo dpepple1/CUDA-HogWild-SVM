@@ -31,6 +31,7 @@ Both the HogWild and HogWild++ folders contain variations of a SGD SVM that are 
 - **Sparse:** Reads in data represented in a sparse format (col:value). Uses cudaMallocs and cudaMemcpys to transfer betweeen device and host memory.
 - **Multi:** Reads in data represented in a sparse format (col:value). Utilizes all threads in a block to perform synchronization instead of just the first thread.
 - **Shared:** Reads in data represented in a sparse format (col: value). Operates on data stored in shared (scratchpad) memory. Block being updated moves its data from shared memory into global memory to allow synchronization, and then moves it back to shared memory. 
+- **JShared:** Reads in data represented in a sparse format (col:value). Operates on data stored in shared (scratchpad) memory. Adapted to use managed memory to take advantage of physically unified memory of the Tegra architecture on Jetson.
 
 #### Components
 - **All components from HogWild!**
@@ -47,7 +48,10 @@ make main       #HogWild! only
 make sparse
 make unified    #HogWild! only
 make managed    #HogWild! only
-make multi      #HogWild! only
+make multi      
+make shared     #HogWild++ only
+make jshared    #HogWild++ only
+
 ```
 from within either the HogWild or HogWild++ folder.
 

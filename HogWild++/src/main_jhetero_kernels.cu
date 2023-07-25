@@ -1,5 +1,5 @@
-#include "../include/SVM_sparse.cuh"
-#include "../include/sparse_data.cuh"
+#include "../include/SVM_jhetero_kernels.cuh"
+#include "../include/sparse_data_managed.cuh"
 #include <fstream>
 #include <string>
 #include <vector>
@@ -65,15 +65,19 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Data
-    CSR_Data data = buildSparseData(DATA_PATH, PATTERNS, FEATURES);
+	cudaDeviceProp deviceProp;
+	cudaGetDeviceProperties(&deviceProp, 0);
+	std::cout << "MultiProcessor count: " << deviceProp.multiProcessorCount << std::endl;
 
+
+    // Data
+    CSR_Data *data = buildSparseData(DATA_PATH, PATTERNS, FEATURES);
     HOGSVM svc(learningRate, stepDecay, epochs);
     
     // Train the model and measure time
     timing_t time = svc.fit(data, FEATURES, PATTERNS, blocks, threadsPerBlock, 64);
     
-    float accuracy = svc.test(data);
+    float accuracy = svc.test(*data);
     std::cout << "Final Accuracy: " << accuracy * 100 << "%" << std::endl;
     
     // Print final weights
@@ -81,7 +85,6 @@ int main(int argc, char *argv[])
     std::cout << "Weights: " << std::endl;
     for(int i = 0; i < FEATURES; i++)
     {
-        //std::cout << weights[i] << " ";
         printf("%09.5f ", weights[i]);
     }
     std::cout << std::endl;

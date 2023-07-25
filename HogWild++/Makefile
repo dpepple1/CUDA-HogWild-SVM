@@ -14,13 +14,17 @@ OBJ := obj
 SRC := src
 BIN := bin
 
-all: sparse multi shared hetero jshared
+all: sparse multi shared hetero jshared jhetero sjhetero mjhetero jkernels
 
 sparse: $(BIN)/sparse
 multi: $(BIN)/multi
 shared: $(BIN)/shared
 hetero: $(BIN)/hetero
 jshared: $(BIN)/jshared
+jhetero: $(BIN)/jhetero
+sjhetero: $(BIN)/sjhetero
+mjhetero: $(BIN)/mjhetero
+jkernels: $(BIN)/jkernels
 
 
 # Sparse SVM
@@ -75,6 +79,40 @@ $(OBJ)/SVM_jshared.o: $(SRC)/SVM_jshared.cu $(INC)/SVM_jshared.cuh
 #	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 $(OBJ)/sparse_data_managed.o: $(SRC)/sparse_data_managed.cu $(INC)/sparse_data_managed.cuh
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+#Sparse SVM with heterogenous synchronization and unified memory(JETSON)
+$(BIN)/jhetero: $(OBJ)/main_jhetero.o $(OBJ)/sparse_data_managed.o $(OBJ)/SVM_jhetero.o $(OBJ)/newton_raphson.o
+	$(NVCC) $(LINK_FLAGS) $^ -o $@
+
+$(OBJ)/main_jhetero.o: $(SRC)/main_jhetero.cu
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+$(OBJ)/SVM_jhetero.o: $(SRC)/SVM_jhetero.cu $(INC)/SVM_jhetero.cuh 
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+#Sparse SVM with heterogeneous synchronziation and shared memory(JETSON)
+$(BIN)/sjhetero: $(OBJ)/main_jhetero.o $(OBJ)/sparse_data_managed.o $(OBJ)/SVM_jhetero_shared.o $(OBJ)/newton_raphson.o
+	$(NVCC) $(LINK_FLAGS) $^ -o $@
+
+$(OBJ)/SVM_jhetero_shared.o: $(SRC)/SVM_jhetero_shared.cu $(INC)/SVM_jhetero.cuh 
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+#Sparse SVM with heterogeneous synchronization multiple kernels (JETSON)
+$(BIN)/mjhetero: $(OBJ)/main_jhetero.o $(OBJ)/sparse_data_managed.o $(OBJ)/SVM_jhetero_multi.o $(OBJ)/newton_raphson.o
+	$(NVCC) $(LINK_FLAGS) $^ -o $@
+
+$(OBJ)/SVM_jhetero_multi.o: $(SRC)/SVM_jhetero_multi.cu $(INC)/SVM_jhetero.cuh
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+#Sparse SVM with deticated synchronization kernel (JETSON)
+$(BIN)/jkernels: $(OBJ)/main_jhetero_kernels.o $(OBJ)/sparse_data_managed.o $(OBJ)/SVM_jhetero_kernels.o $(OBJ)/newton_raphson.o
+	$(NVCC) $(LINK_FLAGS) $^ -o $@
+	
+$(OBJ)/main_jhetero_kernels.o: $(SRC)/main_jhetero_kernels.cu
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
+
+$(OBJ)/SVM_jhetero_kernels.o: $(SRC)/SVM_jhetero_kernels.cu $(INC)/SVM_jhetero_kernels.cuh 
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 
