@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
     HOGSVM svc(0.000001, learningRate, epochs);
     
     // Train the model and measure time
-    long elapsedTime = svc.fit((float*)patterns, FEATURES, labels, PATTERNS, blocks, threadsPerBlock);
+    timing_t time = svc.fit((float*)patterns, FEATURES, labels, PATTERNS, blocks, threadsPerBlock);
     
     // Test the model
     float accuracy = svc.test((float*)patterns, labels);
@@ -114,10 +114,11 @@ int main(int argc, char *argv[])
 
     std::cout << "Bias: " << svc.getBias() << std::endl;
 
-    std::cout << "Time to train: " << elapsedTime << " ns" << std::endl;
+    std::cout << "Kernel Time: " << time.kernelTime << " ns" << std::endl;
+    std::cout << "Total Time: " << time.kernelTime + time.mallocTime << " ns" << std::endl;
 
     if (batchMode)
-        std::cerr << accuracy << "," <<  elapsedTime << std::endl;
+        std::cerr << accuracy << "," <<  time.kernelTime << "," << time.mallocTime << "," << time.kernelTime + time.mallocTime << std::endl;
     
     
     return 0;
