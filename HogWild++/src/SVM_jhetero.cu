@@ -158,7 +158,7 @@ __host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int 
 
             for (uint dim = 0; dim < features; dim++)
             {
-                float weightDifference = thisActiveWeights[dim] - snapshotWeights[dim];
+                float weightDifference = thisActiveWeights[dim] - thisSnapshotWeights[dim];
                 // Refer to HogWild++ synchronization update formula
                 thisSnapshotWeights[dim] = lambda * nextActiveWeights[dim] + (1 - lambda) * thisSnapshotWeights[dim] + beta * pow(stepDecay, *iterBuf) * weightDifference;
                 // Update next active weights (this may need to be made atomic)

@@ -5,7 +5,7 @@ implemented using the HOGWILD++ algorithm for parallelization on GPUs.
 by Derek Pepple
 */
 
-#include "../include/SVM_jhetero.cuh"
+#include "../include/SVM_jhetero_kernels.cuh"
 #include <stdio.h>
 #include <unistd.h>
 
@@ -107,50 +107,37 @@ __host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int 
 
     // Because shared memory doesnt work, use global memory (THIS IS ALOT OF MEMORY)
     float *activeWeights  = NULL;
-    cudaHostAlloc(&activeWeights, features * sizeof(float) * blocks, cudaHostAllocDefault);
-    //cudaMallocManaged(&activeWeights, features * sizeof(float) * blocks); 
+    //cudaHostAlloc(&activeWeights, features * sizeof(float) * blocks, cudaHostAllocDefault);
+    cudaMallocManaged(&activeWeights, features * sizeof(float) * blocks); 
 
     float *snapshotWeights = NULL;
-    cudaHostAlloc(&snapshotWeights, features * sizeof(float) * blocks, cudaHostAllocDefault);
-    //cudaMallocManaged(&snapshotWeights, features * sizeof(float) * blocks);
+    //cudaHostAlloc(&snapshotWeights, features * sizeof(float) * blocks, cudaHostAllocDefault);
+    cudaMallocManaged(&snapshotWeights, features * sizeof(float) * blocks);
 
     float *activeBias = NULL;
-    cudaHostAlloc(&activeBias, sizeof(float) * blocks, cudaHostAllocDefault);
-    //cudaMallocManaged(&activeBias, sizeof(float) * blocks);
+    //cudaHostAlloc(&activeBias, sizeof(float) * blocks, cudaHostAllocDefault);
+    cudaMallocManaged(&activeBias, sizeof(float) * blocks);
 	
     float *snapshotBias = NULL;
-    cudaHostAlloc(&snapshotBias, sizeof(float) * blocks, cudaHostAllocDefault);
-    //cudaMallocManaged(&snapshotBias, sizeof(float) * blocks);
+    //cudaHostAlloc(&snapshotBias, sizeof(float) * blocks, cudaHostAllocDefault);
+    cudaMallocManaged(&snapshotBias, sizeof(float) * blocks);
 
     int *iterBuf = NULL;
     cudaHostAlloc(&iterBuf, sizeof(int), cudaHostAllocMapped);
 
-	//Setup streams for multiple kernels
-	cudaStream_t stream1, stream2;
-	cudaStreamCreate(&stream1);
-	cudaStreamCreate(&stream2);
+	cudaStream_t main_stream;
+	cudaStreamCreate(&main_stream);
+
 
     cudaEvent_t finished;
     cudaEventCreate(&finished);
 
-	//Calculate some values
-	int halfBlocks = blocks / 2;
-	
-
-
     printf("Starting Threads\n");
     // Spawn threads to begin SGD Process
     auto kernelStart = std::chrono::steady_clock::now();
-
-	// Using theadcount parameter to indicate which stream (so as to avoid needing an extra .cuh file!
-    SGDKernel<<<halfBlocks, threadsPerBlock, 0, stream1>>>(0, states, data, 
+    SGDKernel<<<blocks, threadsPerBlock, 0, main_stream>>>(blocks * threadsPerBlock, states, data, 
                         activeWeights, snapshotWeights, activeBias, snapshotBias,
-                        features, numPairs / 2, epochsPerCore, learningRate,
-                        stepDecay, token, sync, beta, lambda, blocks, tau, iterBuf);
-
-    SGDKernel<<<halfBlocks, threadsPerBlock, 0, stream2>>>(1, states, data, 
-                        activeWeights, snapshotWeights, activeBias, snapshotBias,
-                        features, numPairs / 2, epochsPerCore, learningRate,
+                        features, numPairs, epochsPerCore, learningRate,
                         stepDecay, token, sync, beta, lambda, blocks, tau, iterBuf);
 
     // Wait for threads to finish and collect weights
@@ -172,18 +159,7 @@ __host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int 
             float *nextActiveWeights = *token + 1 >= blocks ? activeWeights : thisActiveWeights + features;
             // float *nextSnapshotWeights = *token + 1 >= blocks ? snapshotWeights : thisSnapshotWeights + features;
 
-            for (uint dim = 0; dim < features; dim++)
-            {
-                float weightDifference = thisActiveWeights[dim] - thisSnapshotWeights[dim];
-                // Refer to HogWild++ synchronization update formula
-                thisSnapshotWeights[dim] = lambda * nextActiveWeights[dim] + (1 - lambda) * thisSnapshotWeights[dim] + beta * pow(stepDecay, *iterBuf) * weightDifference;
-                // Update next active weights (this may need to be made atomic)
-                nextActiveWeights[dim] += beta * pow(stepDecay, *iterBuf) * weightDifference;
-                thisActiveWeights[dim] = thisSnapshotWeights[dim];               
-            }
-
-
-            // ------ BIAS ------
+			// ------ BIAS ------
             // Get current bias
             float *thisActiveBias = activeBias + (*token);
             float *thisSnapshotBias = snapshotBias + (*token);
@@ -192,14 +168,37 @@ __host__ timing_t HOGSVM::fit(CSR_Data *data, uint features, uint numPairs, int 
             float *nextActiveBias = *token + 1 >= blocks ? activeBias : thisActiveBias + 1;
             // float *nextSnapshotBias = *token + 1 >= blocks ? snapshotBias : thisSnapshotBias + 1;
 
+			cudaStream_t new_stream;
+			cudaStreamCreate(&new_stream);
+
+			// Be careful not to create too many threads
+			syncKernel<<<1, features, 0, new_stream>>>(thisActiveWeights, thisSnapshotWeights, nextActiveWeights,
+										 thisActiveBias, thisSnapshotBias, nextActiveBias, sync, 
+										 iterBuf, lambda, beta, stepDecay);
+			cudaDeviceSynchronize();
+			
+			/*
+            for (uint dim = 0; dim < features; dim++)
+            {
+                float weightDifference = thisActiveWeights[dim] - snapshotWeights[dim];
+                // Refer to HogWild++ synchronization update formula
+                thisSnapshotWeights[dim] = lambda * nextActiveWeights[dim] + (1 - lambda) * thisSnapshotWeights[dim] + beta * pow(stepDecay, *iterBuf) * weightDifference;
+                // Update next active weights (this may need to be made atomic)
+                nextActiveWeights[dim] += beta * pow(stepDecay, *iterBuf) * weightDifference;
+                thisActiveWeights[dim] = thisSnapshotWeights[dim];               
+            }
+          
+
             //Update bias (Inferred from weights calculation)
             float biasDifference = *thisActiveBias - *thisSnapshotBias;
             *thisSnapshotBias = lambda * (*nextActiveBias) + (1-lambda) * (*thisSnapshotWeights) + beta * pow(stepDecay, *iterBuf) * biasDifference;
             *nextActiveBias += beta * pow(stepDecay, *iterBuf) * biasDifference;
             *thisActiveBias = *thisSnapshotBias;
 
-
             *sync = 0;
+			*/
+
+
         }
         //otherwise wait until its time to sync
      
@@ -329,22 +328,18 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
                             float stepDecay, int *token, int* sync, float beta, 
                             float lambda, int blocks, int tau, int *iterBuf) {      
     // Compute Thread Index
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-	i += (blockDim.x * gridDim.x) * threadCount; // number of threads times threadCount
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
     
-	// Compute Block Index 
-	int blockIdxAdj = blockIdx.x + (gridDim.x * threadCount);
-
     // Get block specific pointer to seperate weights
-    float *blockLocalWeights = activeWeights + (blockIdxAdj * features);
-    //float *blockSnapshotWeights = snapshotWeights + (blockIdxAdj * features);
+    float *blockLocalWeights = activeWeights + (blockIdx.x * features);
+    //float *blockSnapshotWeights = snapshotWeights + (blockIdx.x * features);
 
-    float *blockLocalBias = activeBias + blockIdxAdj;
-    //float *blockSnapshotBias = snapshotBias + blockIdxAdj;
+    float *blockLocalBias = activeBias + blockIdx.x;
+    //float *blockSnapshotBias = snapshotBias + blockIdx.x;
 
     // partition the dataset into chunks by moving thread specific pointer
 
-    uint pairsPerThread = numPairs / (blockDim.x * gridDim.x);
+    uint pairsPerThread = numPairs / threadCount;
     int *labelStart = d_data->labels + (i * pairsPerThread); // Pointer to first label for thread
     int *sparsityStart = d_data->sparsity + (i * pairsPerThread);
     int subsetStart = i * pairsPerThread; // Index to look in row start for row    
@@ -392,7 +387,7 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             delete[] wGrad;
 
             // If sync is false, CPU is waiting so start counting for tau updates
-            if(*token == blockIdxAdj && threadIdx.x == 0 && *sync == 0)
+            if(*token == blockIdx.x && threadIdx.x == 0 && *sync == 0)
             {
                 nextIter = (iter + tau) % pairsPerThread;
                 *sync = 2; //To prevent loop from being retriggered
@@ -400,7 +395,7 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
             if(threadIdx.x == 0 && nextIter == iter) // Congrats! You've done tau updates. Now send the token!
             {
                 //Update token before sync to avoid race condition?
-                *(token) = (blockIdxAdj + 1) % (gridDim.x * 2);
+                *(token) = (blockIdx.x + 1) % blocks;
                 *iterBuf = epoch * iter;
                 *sync = 1;
                 nextIter = -1; // stop counting
@@ -408,6 +403,37 @@ __global__ void SGDKernel(uint threadCount, curandState_t *states, CSR_Data *d_d
         }
     }
 }
+
+
+__global__ void syncKernel(float *thisActiveWeights, float *thisSnapshotWeights, float *nextActiveWeights,
+							float *thisActiveBias, float *thisSnapshotBias, float *nextActiveBias, int *sync, 
+							int *iterBuf, float lambda, float beta, float stepDecay)
+{
+	const int i = blockIdx.x * blockDim.x + threadIdx.x;
+	printf("Syncing!\n");
+	
+	// Update Weights
+	float weightDifference = thisActiveWeights[i] - thisSnapshotWeights[i];
+    // Refer to HogWild++ synchronization update formula
+    thisSnapshotWeights[i] = lambda * nextActiveWeights[i] + (1 - lambda) * thisSnapshotWeights[i] + beta * pow(stepDecay, *iterBuf) * weightDifference;
+    // Update next active weights (this may need to be made atomic)
+    nextActiveWeights[i] += beta * pow(stepDecay, *iterBuf) * weightDifference;
+    thisActiveWeights[i] = thisSnapshotWeights[i];  
+
+	//Update Bias
+	if(i == 0)
+	{
+		float biasDifference = *thisActiveBias - *thisSnapshotBias;
+        *thisSnapshotBias = lambda * (*nextActiveBias) + (1-lambda) * (*thisSnapshotWeights) + beta * pow(stepDecay, *iterBuf) * biasDifference;
+        *nextActiveBias += beta * pow(stepDecay, *iterBuf) * biasDifference;
+        *thisActiveBias = *thisSnapshotBias;	
+	}
+
+
+	__syncthreads();
+	*sync = 0;
+}
+
 
 __host__ __device__ float testAccuracy(CSR_Data data, uint features, float *weights, float bias, uint numPairs) 
 {

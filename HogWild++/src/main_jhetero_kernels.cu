@@ -1,4 +1,4 @@
-#include "../include/SVM_jhetero.cuh"
+#include "../include/SVM_jhetero_kernels.cuh"
 #include "../include/sparse_data_managed.cuh"
 #include <fstream>
 #include <string>
@@ -65,10 +65,9 @@ int main(int argc, char *argv[])
         }
     }
 
-	std::cout << "Float *" << sizeof(float *) << std::endl;
-	std::cout << "Int *" << sizeof(int *) << std::endl;
-	std::cout << "CSR_Data *" << sizeof(CSR_Data *) << std::endl;
-	std::cout << "curandState_t *" << sizeof(curandState_t *) << std::endl;
+	cudaDeviceProp deviceProp;
+	cudaGetDeviceProperties(&deviceProp, 0);
+	std::cout << "MultiProcessor count: " << deviceProp.multiProcessorCount << std::endl;
 
 
     // Data
