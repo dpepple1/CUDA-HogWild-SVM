@@ -64,6 +64,11 @@ int main(int argc, char *argv[])
             std::cout << "Invalid Flag: " << argv[arg] << "!" << std::endl;
         }
     }
+    
+    std::cout << "Float *" << sizeof(float *) << std::endl;
+    std::cout << "Int *" << sizeof(int *) << std::endl;
+    std::cout << "CSR_Data *" << sizeof(CSR_Data *) << std::endl;
+    std::cout << "curandState_t *" << sizeof(curandState_t *) << std::endl; 
 
     // Data
     CSR_Data data = buildSparseData(DATA_PATH, PATTERNS, FEATURES);

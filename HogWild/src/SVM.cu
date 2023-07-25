@@ -68,10 +68,10 @@ __host__ void HOGSVM::freeTrainingData(float *d_patterns, int *d_labels)
     cudaFree(d_labels);
 }
 
-__host__ long HOGSVM::fit(float *patterns, uint features, int *labels, 
+__host__ timing_t HOGSVM::fit(float *patterns, uint features, int *labels, 
                             uint numPairs, int blocks, int threadsPerBlock) {
 
-    auto begin = std::chrono::steady_clock::now();
+    auto mallocStart = std::chrono::steady_clock::now();
     
     this->features = features;
     this->numPairs = numPairs;
@@ -100,22 +100,26 @@ __host__ long HOGSVM::fit(float *patterns, uint features, int *labels,
     float *d_patterns = setupGPUPatterns(patterns, features, numPairs);
     
     // Spawn threads to begin SGD Process
+    auto kernelStart = std::chrono::steady_clock::now();
     SGDKernel<<<blocks, threadsPerBlock>>>(blocks * threadsPerBlock, states,
                          d_patterns, d_labels, features, numPairs, epochsPerCore, 
                          d_weights, d_bias, learningRate);
 
     // Wait for threads to finish and collect weights
     cudaDeviceSynchronize();
-    
+    auto end = std::chrono::steady_clock::now();
 
     cudaMemcpy(weights, d_weights, features * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(&bias, d_bias, sizeof(float), cudaMemcpyDeviceToHost);
-    auto end = std::chrono::steady_clock::now();
     cudaFree(d_weights);
     cudaFree(states);
     freeTrainingData(d_patterns, d_labels);
 
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+    timing_t time;
+    time.mallocTime = std::chrono::duration_cast<std::chrono::nanoseconds>(kernelStart - mallocStart).count();
+    time.kernelTime = std::chrono::duration_cast<std::chrono::nanoseconds>(end - kernelStart).count();
+
+    return time;
 }
 
 __host__ float HOGSVM::test(float *test_patterns, int *test_labels)

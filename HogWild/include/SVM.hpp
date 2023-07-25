@@ -21,6 +21,12 @@ by Derek Pepple
 #include <curand_kernel.h>
 #include <chrono>
 
+struct timing_t
+{
+  long kernelTime;
+  long mallocTime;  
+};
+
 
 class HOGSVM
 {
@@ -30,7 +36,7 @@ class HOGSVM
         ~HOGSVM();
 
         // Public methods
-        CUDA_HOS long fit(float *patterns, uint features, int *labels, uint numPairs,
+        CUDA_HOS timing_t fit(float *patterns, uint features, int *labels, uint numPairs,
                             int blocks, int threadsPerBlock);
         CUDA_HOS float test(float *test_patterns, int *test_labels);
         CUDA_HOS float* getWeights();
