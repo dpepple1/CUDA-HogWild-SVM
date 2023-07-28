@@ -14,15 +14,13 @@ OBJ := obj
 SRC := src
 BIN := bin
 
-all: sparse multi shared hetero jshared jhetero sjhetero mjhetero jkernels
+all: sparse multi shared hetero jshared jhetero mjhetero jkernels
 
 sparse: $(BIN)/sparse
 multi: $(BIN)/multi
 shared: $(BIN)/shared
-hetero: $(BIN)/hetero
 jshared: $(BIN)/jshared
 jhetero: $(BIN)/jhetero
-sjhetero: $(BIN)/sjhetero
 mjhetero: $(BIN)/mjhetero
 jkernels: $(BIN)/jkernels
 
@@ -55,16 +53,6 @@ $(BIN)/shared: $(OBJ)/main_sparse.o $(OBJ)/sparse_data.o $(OBJ)/SVM_sparse_share
 $(OBJ)/SVM_sparse_shared.o: $(SRC)/SVM_sparse_shared.cu $(INC)/SVM_sparse.cuh 
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 	
-# Sparse SVM with Heterogenous updates
-$(BIN)/hetero: $(OBJ)/main_sparse_hetero.o $(OBJ)/sparse_data.o $(OBJ)/SVM_sparse_hetero.o $(OBJ)/newton_raphson.o
-	$(NVCC) $(LINK_FLAGS) $^ -o $@
-	
-$(OBJ)/main_sparse_hetero.o: $(SRC)/main_sparse_hetero.cu
-	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
-
-$(OBJ)/SVM_sparse_hetero.o: $(SRC)/SVM_sparse_hetero.cu $(INC)/SVM_sparse_hetero.cuh 
-	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
-
 # Sparse SVM with shared memory and unified memory (JETSON)
 $(BIN)/jshared: $(OBJ)/main_jshared.o $(OBJ)/sparse_data_managed.o $(OBJ)/SVM_jshared.o $(OBJ)/newton_raphson.o
 	$(NVCC) $(LINK_FLAGS) $^ -o $@
@@ -89,13 +77,6 @@ $(OBJ)/main_jhetero.o: $(SRC)/main_jhetero.cu
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 $(OBJ)/SVM_jhetero.o: $(SRC)/SVM_jhetero.cu $(INC)/SVM_jhetero.cuh 
-	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
-
-#Sparse SVM with heterogeneous synchronziation and shared memory(JETSON)
-$(BIN)/sjhetero: $(OBJ)/main_jhetero.o $(OBJ)/sparse_data_managed.o $(OBJ)/SVM_jhetero_shared.o $(OBJ)/newton_raphson.o
-	$(NVCC) $(LINK_FLAGS) $^ -o $@
-
-$(OBJ)/SVM_jhetero_shared.o: $(SRC)/SVM_jhetero_shared.cu $(INC)/SVM_jhetero.cuh 
 	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 #Sparse SVM with heterogeneous synchronization multiple kernels (JETSON)
