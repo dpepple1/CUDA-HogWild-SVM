@@ -7,10 +7,10 @@
 
 // RCV1
 #define FEATURES 47236
-#define PATTERNS 20242 //TRAIN
-// #define PATTERNS 677399 //TEST
-#define DATA_PATH "../data/rcv1/rcv1_train_labeled.binary" // TRAIN
-// #define DATA_PATH "../data/rcv1/rcv1_test_labeled.binary" // TEST
+// #define PATTERNS 20242 //TRAIN
+#define PATTERNS 677399 //TEST
+// #define DATA_PATH "../data/rcv1/rcv1_train_labeled.binary" // TRAIN
+#define DATA_PATH "../data/rcv1/rcv1_test_labeled.binary" // TEST
 
 // WEBSPAM
 // #define FEATURES 254

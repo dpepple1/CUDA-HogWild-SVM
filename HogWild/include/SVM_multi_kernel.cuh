@@ -66,6 +66,3 @@ CUDA_HOS CUDA_DEV float testAccuracy(CSR_Data data, uint features,
 CUDA_GLO void alternateKernel(float *dummy, int *stop);
 
 #endif
-
-10405909333
-10438948612
