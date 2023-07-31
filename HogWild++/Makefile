@@ -1,7 +1,7 @@
 PLATFORM = $(shell uname -m)
 CC = $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader|head -n 1)
 NVCC := nvcc
-echo ${CC}
+
 
 ifeq ($(PLATFORM), x86_64) # compiling on WSL
 	ifeq ($(CC), 8.9)
