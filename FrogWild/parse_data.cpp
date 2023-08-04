@@ -14,7 +14,7 @@ void return_list(string path, int** arr){
             stringstream stream_data(line); //Stream Class to operate on strings
             while(getline(stream_data,word,',')){
                 //Extract data until ',' is found
-                *(arr[count])=word;
+                *(arr[count])=stoi(word);
                 arr[count]++;
             }
             count++;
