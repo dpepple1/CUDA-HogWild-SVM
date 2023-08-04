@@ -2,7 +2,7 @@
 
 
 
-void return_list(string path, int** arr){
+__host__ void return_list(string path, int** arr){
     fstream data;
     data.open(path);
     string line,word;
@@ -13,12 +13,18 @@ void return_list(string path, int** arr){
             //Keep extracting data until a delimiter is found
             stringstream stream_data(line); //Stream Class to operate on strings
             while(getline(stream_data,word,',')){
+                if(count==0){
+                    continue;
+                }
+                else{
+                    *(arr[count-1])=stoi(word);
+                    arr[count-1]++;
+                }
                 //Extract data until ',' is found
-                *(arr[count])=stoi(word);
-                arr[count]++;
             }
             count++;
         }
     }
     data.close();
 }
+

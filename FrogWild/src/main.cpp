@@ -1,11 +1,8 @@
-#include "data.h"
+#include "../include/data.h"
 
 
 int main()
 {  
-    fstream data;
-    data.open("webGoogle.csv");
-    string line,word;
     int** edges=new int*[EDGES];
     for(int i=0; i<EDGES; i++){
         edges[i]=new int[2];
@@ -14,7 +11,8 @@ int main()
     for(int i=0; i<NODES;i++){
         cluster[i]=new int[2];
     }
-    int count=0;
+    return_list(EDGE_PATH,edges);
+    return_list(CLUSTER_PATH,cluster);
 
     return 0;
 }
